@@ -38,35 +38,7 @@ declare global {
     }
   }
 }
-// Minimal .env loader (no dotenv dependency). Loads SMTP_* / MAIL_FROM (and any
-// other KEY=VALUE) from a local `.env` file so real email delivery can be
-// configured without extra packages. Never overrides already-set env vars.
-try {
-  const envFile = path.join(process.cwd(), ".env");
-  if (!process.env.VERCEL && fs.existsSync(envFile)) {
-    for (const rawLine of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith("#")) continue;
-      const eq = line.indexOf("=");
-      if (eq === -1) continue;
-      const key = line.slice(0, eq).trim();
-      if (!key || process.env[key] !== undefined) continue;
-      let val = line.slice(eq + 1).trim();
-      if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1);
-      }
-      process.env[key] = val;
-    }
-    console.log("[ENV] Loaded configuration from .env (SMTP ready if configured).");
-  } else {
-    console.log("[ENV] No .env file found — SMTP email delivery will fall back to .eml generation.");
-  }
-} catch (envErr: any) {
-  console.warn("[ENV] Could not load .env file:", envErr && envErr.message ? envErr.message : envErr);
-}
 
-// Diagnose the most common email misconfigurations up-front so missing mail is
-// easy to spot in the server console instead of silently producing .eml files.
 function getSmtpConfig(): { configured: boolean; missing: string[] } {
   const required = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "MAIL_FROM"];
   const missing = required.filter((key) => !String(process.env[key] || "").trim());
@@ -3640,6 +3612,345 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     });
 
     res.json({ success: true, team });
+  });
+
+  // CSV Import Endpoint
+  app.post("/api/admin/import-csv", requireAdmin, (req, res) => {
+    try {
+      const { csvContent, confirm } = req.body;
+      if (!csvContent || typeof csvContent !== "string" || csvContent.trim() === "") {
+        return res.status(400).json({ success: false, error: "CSV content is required." });
+      }
+
+      const lines = csvContent.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line: string) => line.trim().length > 0);
+      if (lines.length < 2) {
+        return res.status(400).json({ success: false, error: "CSV must have a header row and at least one data row." });
+      }
+
+      const headers = parseCsvLine(lines[0]).map((h: string) => h.trim().toLowerCase());
+      const dataRows = lines.slice(1).map(parseCsvLine);
+
+      const requiredColumns: Record<string, string[]> = {
+        team_name: ["team name"],
+        domain: ["select the domain"],
+        college: ["college"],
+        accommodation: ["accommodation"],
+        leader_full_name: ["team leader full name"],
+        leader_email: ["team leader email id"],
+        leader_phone: ["team leader whatsapp number"],
+        num_teammates: ["number of teammates"],
+        p2_full_name: ["participant 2 full name"],
+        p2_email: ["participant 2 email id"],
+        p2_phone: ["participant 2 phone number"],
+        p3_full_name: ["participant 3 full name"],
+        p3_email: ["participant 3 email id"],
+        p3_phone: ["participant 3 phone number"],
+        p4_full_name: ["participant 4 full name"],
+        p4_email: ["participant 4 email id"],
+        p4_phone: ["participant 4 phone number"],
+        utr: ["transaction id / utr number"],
+        payment_screenshot: ["payment slip"]
+      };
+
+      const fieldMap: Record<string, number> = {};
+      for (const [key, aliases] of Object.entries(requiredColumns)) {
+        const idx = aliases.findIndex(alias => headers.includes(alias));
+        if (idx === -1) {
+          return res.status(400).json({ success: false, error: `Missing required column: "${aliases[0]}". Found columns: ${headers.join(", ")}` });
+        }
+        fieldMap[key] = idx;
+      }
+
+      interface PreviewRow {
+        rowIndex: number;
+        teamName: string;
+        leaderEmail: string;
+        amount: string;
+        utr: string;
+        paymentDetail: string;
+        status: 'Valid' | 'Invalid';
+        errors: string[];
+        rowData?: any;
+      }
+
+      const preview: PreviewRow[] = [];
+      const csvEmails = new Set<string>();
+      const csvPhones = new Set<string>();
+      const csvUtrs = new Set<string>();
+      const csvTeamNames = new Set<string>();
+
+      for (let i = 0; i < dataRows.length; i++) {
+        const row = dataRows[i];
+        const errors: string[] = [];
+        const rowIndex = i + 1;
+
+        const teamName = (row[fieldMap["team_name"]] || "").trim();
+        const domain = (row[fieldMap["domain"]] || "").trim();
+        const college = (row[fieldMap["college"]] || "").trim();
+        const accommodation = (row[fieldMap["accommodation"]] || "").trim();
+        const leaderFullName = (row[fieldMap["leader_full_name"]] || "").trim();
+        const leaderEmail = (row[fieldMap["leader_email"]] || "").trim();
+        const leaderPhone = (row[fieldMap["leader_phone"]] || "").trim();
+        const numTeammatesStr = (row[fieldMap["num_teammates"]] || "").trim();
+        const p2FullName = (row[fieldMap["p2_full_name"]] || "").trim();
+        const p2Email = (row[fieldMap["p2_email"]] || "").trim();
+        const p2Phone = (row[fieldMap["p2_phone"]] || "").trim();
+        const p3FullName = (row[fieldMap["p3_full_name"]] || "").trim();
+        const p3Email = (row[fieldMap["p3_email"]] || "").trim();
+        const p3Phone = (row[fieldMap["p3_phone"]] || "").trim();
+        const p4FullName = (row[fieldMap["p4_full_name"]] || "").trim();
+        const p4Email = (row[fieldMap["p4_email"]] || "").trim();
+        const p4Phone = (row[fieldMap["p4_phone"]] || "").trim();
+        const utr = (row[fieldMap["utr"]] || "").trim();
+        const paymentSlip = (row[fieldMap["payment_screenshot"]] || "").trim();
+
+        const numTeammates = parseInt(numTeammatesStr, 10);
+        const cleanLeaderPhone = leaderPhone.replace(/[^0-9]/g, "");
+        const cleanUtr = utr.toUpperCase();
+
+        if (!teamName || teamName.length < 2 || teamName.length > 50) {
+          errors.push("Team name must be between 2 and 50 characters.");
+        }
+        if (!domain || !validRegistrationDomains.has(domain)) {
+          errors.push(`Invalid domain "${domain}". Must be one of: ${Array.from(validRegistrationDomains).join(", ")}`);
+        }
+        if (!leaderFullName) errors.push("Team leader full name is required.");
+        if (!leaderEmail || !/^[^\s@]+@gmail\.com$/i.test(leaderEmail)) {
+          errors.push("Leader email must be a valid @gmail.com address.");
+        }
+        if (cleanLeaderPhone.length !== 10 || !/^\d{10}$/.test(cleanLeaderPhone)) {
+          errors.push("Leader phone number must contain exactly 10 digits.");
+        }
+        if (numTeammates !== 2 && numTeammates !== 3) {
+          errors.push("Number of teammates must be 2 or 3.");
+        }
+
+        const participantDefs = [
+          { name: p2FullName, email: p2Email, phone: p2Phone, idx: 2 },
+          { name: p3FullName, email: p3Email, phone: p3Phone, idx: 3 },
+          { name: p4FullName, email: p4Email, phone: p4Phone, idx: 4 },
+        ];
+
+        for (let j = 0; j < numTeammates; j++) {
+          const p = participantDefs[j];
+          if (!p.name) errors.push(`Participant ${p.idx} full name is required.`);
+          if (!p.email || !/^[^\s@]+@gmail\.com$/i.test(p.email)) {
+            errors.push(`Participant ${p.idx} email must be a valid @gmail.com address.`);
+          }
+          const cleanPhone = p.phone.replace(/[^0-9]/g, "");
+          if (cleanPhone.length !== 10 || !/^\d{10}$/.test(cleanPhone)) {
+            errors.push(`Participant ${p.idx} phone number must contain exactly 10 digits.`);
+          }
+        }
+
+        if (numTeammates === 2 && (p4FullName || p4Email || p4Phone)) {
+          errors.push("Participant 4 fields should be empty for 2-teammate teams.");
+        }
+
+        if (!utr || !/^\d{12}$/.test(cleanUtr)) {
+          errors.push("UTR must be exactly 12 digits.");
+        }
+        if (!college) errors.push("College is required.");
+
+        const accLower = accommodation.toLowerCase();
+        if (accLower !== "" && accLower !== "yes" && accLower !== "no" && accLower !== "true" && accLower !== "false") {
+          errors.push("Accommodation must be Yes/No.");
+        }
+
+        const normTeamName = normalizeTeamName(teamName);
+        if (teamName && csvTeamNames.has(normTeamName)) {
+          errors.push(`Duplicate team name "${teamName}" within CSV.`);
+        }
+        if (leaderEmail && csvEmails.has(leaderEmail.toLowerCase())) {
+          errors.push(`Duplicate email "${leaderEmail}" within CSV.`);
+        }
+        if (cleanLeaderPhone && csvPhones.has(cleanLeaderPhone)) {
+          errors.push(`Duplicate phone "${cleanLeaderPhone}" within CSV.`);
+        }
+        if (cleanUtr && csvUtrs.has(cleanUtr)) {
+          errors.push(`Duplicate UTR "${cleanUtr}" within CSV.`);
+        }
+
+        csvTeamNames.add(normTeamName);
+        if (leaderEmail) csvEmails.add(leaderEmail.toLowerCase());
+        if (cleanLeaderPhone) csvPhones.add(cleanLeaderPhone);
+        if (cleanUtr) csvUtrs.add(cleanUtr);
+
+        const amount = numTeammates === 2 ? "₹750" : "₹1000";
+        const paymentDetail = `Pending admin payment audit for ${cmsConfig.registrationFee || 250} INR`;
+
+        preview.push({
+          rowIndex,
+          teamName: teamName || "(empty)",
+          leaderEmail: leaderEmail || "(empty)",
+          amount,
+          utr: cleanUtr || "(empty)",
+          paymentDetail,
+          status: errors.length > 0 ? 'Invalid' : 'Valid',
+          errors,
+          rowData: {
+            teamName, domain, college, accommodation, leaderFullName, leaderEmail, leaderPhone,
+            numTeammates, p2FullName, p2Email, p2Phone, p3FullName, p3Email, p3Phone,
+            p4FullName, p4Email, p4Phone, utr: cleanUtr, paymentSlip
+          }
+        });
+      }
+
+      for (const p of preview) {
+        if (p.status !== 'Valid') continue;
+        const rd = p.rowData!;
+        if (registeredTeamNames.has(normalizeTeamName(rd.teamName))) {
+          p.errors.push(`Team name "${rd.teamName}" already exists in database.`);
+          p.status = 'Invalid';
+        }
+        if (registeredEmails.has(rd.leaderEmail.toLowerCase())) {
+          p.errors.push(`Leader email "${rd.leaderEmail}" already exists in database.`);
+          p.status = 'Invalid';
+        }
+        const cleanLeaderPhone = rd.leaderPhone.replace(/[^0-9]/g, "");
+        if (cleanLeaderPhone && registeredPhones.has(cleanLeaderPhone)) {
+          p.errors.push(`Leader phone "${cleanLeaderPhone}" already exists in database.`);
+          p.status = 'Invalid';
+        }
+        if (rd.utr && registeredUtrs.has(rd.utr)) {
+          p.errors.push(`UTR "${rd.utr}" already exists in database.`);
+          p.status = 'Invalid';
+        }
+      }
+
+      const invalidCount = preview.filter(p => p.status === 'Invalid').length;
+
+      if (invalidCount > 0) {
+        return res.json({
+          success: true,
+          valid: false,
+          preview: preview.map(({ rowData, ...rest }) => rest),
+          message: `${invalidCount} row(s) have errors. Zero rows will be imported. Fix all errors and re-upload.`
+        });
+      }
+
+      if (!confirm) {
+        return res.json({
+          success: true,
+          valid: true,
+          preview: preview.map(({ rowData, ...rest }) => rest),
+          message: `All ${preview.length} rows are valid. Confirm import to proceed.`,
+          canImport: true
+        });
+      }
+
+      const importedTeams: any[] = [];
+      for (let i = 0; i < dataRows.length; i++) {
+        const rd = preview[i].rowData!;
+        const teamIndex = ++nextTeamNumber;
+        const teamId = `AN-${String(teamIndex).padStart(3, '0')}`;
+
+        const leaderParticipant: Participant = {
+          id: `p-${teamIndex}-1`,
+          fullName: sanitizeInputString(rd.leaderFullName),
+          college: sanitizeInputString(rd.college),
+          state: '',
+          email: rd.leaderEmail,
+          phone: sanitizeInputString(rd.leaderPhone),
+          usn: '',
+          gender: '',
+          role: 'Leader',
+          teamId,
+          accommodationRequired: rd.accommodation.toLowerCase() === 'yes' || rd.accommodation.toLowerCase() === 'true',
+          checkedIn: false,
+          foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
+        };
+
+        const members: Participant[] = [];
+        const participantDefs = [
+          { name: rd.p2FullName, email: rd.p2Email, phone: rd.p2Phone },
+          { name: rd.p3FullName, email: rd.p3Email, phone: rd.p3Phone },
+          { name: rd.p4FullName, email: rd.p4Email, phone: rd.p4Phone },
+        ];
+
+        for (let j = 0; j < rd.numTeammates; j++) {
+          const p = participantDefs[j];
+          members.push({
+            id: `p-${teamIndex}-${j + 2}`,
+            fullName: sanitizeInputString(p.name),
+            college: sanitizeInputString(rd.college),
+            state: '',
+            email: p.email,
+            phone: sanitizeInputString(p.phone),
+            usn: '',
+            gender: '',
+            role: 'Member',
+            teamId,
+            accommodationRequired: rd.accommodation.toLowerCase() === 'yes' || rd.accommodation.toLowerCase() === 'true',
+            checkedIn: false,
+            foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
+          });
+        }
+
+        const accessPassword = generatePortalPassword();
+
+        const newTeam: Team = {
+          id: teamId,
+          teamName: sanitizeInputString(rd.teamName),
+          leaderEmail: rd.leaderEmail,
+          accessPassword: hashPassword(accessPassword),
+          portalPasswordPlain: accessPassword,
+          domain: sanitizeInputString(rd.domain),
+          preferredTrack: sanitizeInputString(rd.domain),
+          members: [leaderParticipant, ...members],
+          status: 'PENDING_PAYMENT_AUDIT' as any,
+          createdAt: new Date().toISOString(),
+          projectSubmitted: false,
+          paymentUtr: rd.utr,
+          paymentStatus: 'PENDING_PAYMENT_AUDIT' as any,
+          paymentAmountDetail: `Pending admin payment audit for ${cmsConfig.registrationFee || 250} INR`,
+          paymentScreenshot: rd.paymentSlip || null,
+          credentialDeliveryStatus: 'queued',
+          approvalStatus: 'PENDING',
+          approvalTimestamp: '',
+          approvalEmailStatus: 'PENDING',
+          approvalEmailSentAt: ''
+        };
+
+        if (productionStoreEnabled) {
+          try {
+            await saveProductionTeam(newTeam);
+          } catch (storageError: any) {
+            console.error("[DATABASE] Production CSV import write failed:", storageError?.message || storageError);
+            return res.status(503).json({ success: false, error: "Production registration storage is temporarily unavailable." });
+          }
+        }
+
+        teams.push(newTeam);
+        rebuildUniquenessIndexes();
+        markDirty();
+
+        try {
+          await appendParticipantRegistrationBackup(newTeam);
+        } catch (backupError) {
+          console.error(`[BACKUP] Team ${newTeam.id} CSV backup update failed:`, backupError);
+        }
+
+        importedTeams.push({
+          id: newTeam.id,
+          teamName: newTeam.teamName,
+          leaderEmail: newTeam.leaderEmail,
+          amount: newTeam.members.length * (cmsConfig.registrationFee || 250)
+        });
+      }
+
+      return res.json({
+        success: true,
+        valid: true,
+        imported: true,
+        count: importedTeams.length,
+        teams: importedTeams,
+        message: `Successfully imported ${importedTeams.length} team(s). All entered PENDING_PAYMENT_AUDIT flow.`
+      });
+    } catch (err: any) {
+      console.error("[CSV IMPORT ERROR]", err);
+      res.status(500).json({ success: false, error: err.message || "CSV import failed." });
+    }
   });
 
   // Judging Rounds API

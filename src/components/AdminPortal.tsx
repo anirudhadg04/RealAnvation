@@ -5,15 +5,15 @@ import {
   MilestoneReport, WebsiteCMSConfig, Participant, AuditLog, AdminUser, 
   RulebookVersion, EmailCampaign, JudgingRound, Mentor, Judge, Sponsor, ScheduleItem, Checkpoint 
 } from '../types';
-import { 
-  ShieldCheck, Users, Award, Bell, Ticket, Download, Search, 
-  CheckCircle2, AlertTriangle, Plus, Send, RefreshCw, Lock, Key, 
-  LogOut, Check, Clock, Globe, Settings, Edit3, Save, CheckSquare, 
-  FileText, Mail, DollarSign, BarChart2, ShieldAlert, Cpu, Eye, EyeOff, Trash2, 
-  UserPlus, Filter, X, Zap, Layers, Calendar, ChevronRight, HelpCircle, 
-  AlertCircle, Database, Activity, Building, Briefcase, UserCheck, Server, 
+import {
+  ShieldCheck, Users, Award, Bell, Ticket, Download, Search,
+  CheckCircle2, AlertTriangle, Plus, Send, RefreshCw, Lock, Key,
+  LogOut, Check, Clock, Globe, Settings, Edit3, Save, CheckSquare,
+  FileText, Mail, DollarSign, BarChart2, ShieldAlert, Cpu, Eye, EyeOff, Trash2,
+  UserPlus, Filter, X, Zap, Layers, Calendar, ChevronRight, HelpCircle,
+  AlertCircle, Database, Activity, Building, Briefcase, UserCheck, Server,
   Sliders, FileCode, Share2, Compass, Printer, PieChart, TrendingUp, Maximize2,
-  QrCode, UserMinus, Handshake
+  QrCode, UserMinus, Handshake, Upload, Eye
 } from 'lucide-react';
 import { CheckInScanner } from './CheckInScanner';
 
@@ -196,6 +196,7 @@ export const AdminPortal: React.FC = () => {
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [isEditTeamModalOpen, setIsEditTeamModalOpen] = useState(false);
+  const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
   const [scoreOverrideModal, setScoreOverrideModal] = useState<{ open: boolean; submissionId: string; currentScore: number; reason: string }>({
     open: false,
     submissionId: '',
@@ -216,6 +217,30 @@ export const AdminPortal: React.FC = () => {
     password?: string;
     error?: string;
   } | null>(null);
+
+  // CSV Import State
+  const [csvImportModal, setCsvImportModal] = useState<{
+    open: boolean;
+    file: File | null;
+    preview: Array<{
+      rowIndex: number;
+      teamName: string;
+      leaderEmail: string;
+      amount: string;
+      utr: string;
+      paymentDetail: string;
+      status: 'Valid' | 'Invalid';
+      errors: string[];
+    }> | null;
+    validationError: string | null;
+    importing: boolean;
+  }>({
+    open: false,
+    file: null,
+    preview: null,
+    validationError: null,
+    importing: false
+  });
 
   // Forms State
   const [broadcastMsg, setBroadcastMsg] = useState('🚨 Checkpoint 2 Review starting in 15 mins at CSE Lab 304!');
@@ -1092,6 +1117,73 @@ export const AdminPortal: React.FC = () => {
     }
   };
 
+  const [csvContent, setCsvContent] = useState<string>('');
+  const csvFileRef = React.useRef<HTMLInputElement>(null);
+
+  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const text = String(ev.target?.result || '');
+      setCsvContent(text);
+      setCsvImportModal({ open: true, file, preview: null, validationError: null, importing: false });
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCsvValidate = async () => {
+    setCsvImportModal(prev => ({ ...prev, preview: null, validationError: null }));
+    try {
+      const res = await fetch('/api/admin/import-csv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csvContent, confirm: false })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setCsvImportModal(prev => ({
+          ...prev,
+          preview: data.preview || null,
+          validationError: data.valid ? null : (data.message || null)
+        }));
+      } else {
+        setCsvImportModal(prev => ({
+          ...prev,
+          validationError: data.error || 'Validation failed.'
+        }));
+      }
+    } catch (err) {
+      setCsvImportModal(prev => ({ ...prev, validationError: 'Network error during validation.' }));
+    }
+  };
+
+  const handleCsvImport = async () => {
+    setCsvImportModal(prev => ({ ...prev, importing: true }));
+    try {
+      const res = await fetch('/api/admin/import-csv', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ csvContent, confirm: true })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✓ Imported ${data.count} team(s) into PENDING_PAYMENT_AUDIT flow.`);
+        setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false });
+        setCsvContent('');
+        fetchAdminData();
+      } else {
+        setCsvImportModal(prev => ({
+          ...prev,
+          importing: false,
+          validationError: data.error || 'Import failed.'
+        }));
+      }
+    } catch (err) {
+      setCsvImportModal(prev => ({ ...prev, importing: false, validationError: 'Network error during import.' }));
+    }
+  };
+
   const exportCSV = (data: any[], filename: string) => {
     if (!data.length) return;
     const headers = Object.keys(data[0]).join(',');
@@ -1958,8 +2050,48 @@ export const AdminPortal: React.FC = () => {
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
+                        <button
+                          onClick={() => {
+                            const next = new Set(expandedTeams);
+                            if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
+                            setExpandedTeams(next);
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 font-bold text-xs flex items-center gap-1 transition-colors"
+                        >
+                          <Eye className="w-3 h-3" />
+                          {expandedTeams.has(t.id) ? 'Hide' : 'View'} Participants
+                        </button>
                       </div>
                     </div>
+
+                    {expandedTeams.has(t.id) && (
+                      <div className="mt-2 pt-3 border-t border-slate-800/60 animate-fadeIn">
+                        <table className="w-full text-left text-[10px]">
+                          <thead className="bg-slate-900 text-slate-400 font-mono text-[9px] uppercase border-b border-slate-800">
+                            <tr>
+                              <th className="p-2">Role</th>
+                              <th className="p-2">Name</th>
+                              <th className="p-2">Email</th>
+                              <th className="p-2">Phone</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/40">
+                            {t.members.map((m) => (
+                              <tr key={m.id} className="hover:bg-slate-900/50">
+                                <td className="p-2">
+                                  <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                                    m.role === 'Leader' ? 'bg-amber-950 text-amber-300 border border-amber-800' : 'bg-slate-800 text-slate-300'
+                                  }`}>{m.role}</span>
+                                </td>
+                                <td className="p-2 text-white font-bold">{m.fullName}</td>
+                                <td className="p-2 text-slate-300">{m.email}</td>
+                                <td className="p-2 font-mono text-slate-400">{m.phone || '—'}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -3383,9 +3515,14 @@ export const AdminPortal: React.FC = () => {
                     Verify UPI UTR transactions, approve team fees, and monitor revenue generation.
                   </p>
                 </div>
-                <button onClick={() => exportCSV(teams, 'KS_HACKNOVE_FINANCE')} className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-white flex items-center gap-1.5">
-                  <Download className="w-3.5 h-3.5" /> Export Financial Report
-                </button>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => csvFileRef.current?.click()} className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 border border-emerald-700/60 text-xs font-bold text-emerald-300 flex items-center gap-1.5">
+                    <Upload className="w-3.5 h-3.5" /> Upload CSV
+                  </button>
+                  <button onClick={() => exportCSV(teams, 'KS_HACKNOVE_FINANCE')} className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-white flex items-center gap-1.5">
+                    <Download className="w-3.5 h-3.5" /> Export Financial Report
+                  </button>
+                </div>
               </div>
 
               {/* Finance Overview Cards */}
@@ -4092,9 +4229,140 @@ export const AdminPortal: React.FC = () => {
               </button>
             </div>
           </div>
+          </div>
         </div>
-      )}
 
-    </div>
-  );
-};
+        {/* CSV Import Modal */}
+        {csvImportModal.open && (
+          <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false })}>
+            <div className="bg-slate-900 border border-slate-700 w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div>
+                  <h3 className="text-lg font-black text-white flex items-center gap-2">
+                    <Upload className="w-5 h-5 text-emerald-400" /> CSV Import — Team Registration
+                  </h3>
+                  <p className="text-xs text-slate-400">
+                    Upload a CSV file to bulk-import teams. All rows are validated before any data is written.
+                  </p>
+                </div>
+                <button onClick={() => setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false })} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <input ref={csvFileRef} type="file" accept=".csv" className="hidden" onChange={handleCsvFileChange} />
+
+              {csvImportModal.file && (
+                <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300">
+                  Selected file: <span className="font-bold text-white">{csvImportModal.file.name}</span>
+                </div>
+              )}
+
+              {csvImportModal.validationError && !csvImportModal.preview && (
+                <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                  <span>{csvImportModal.validationError}</span>
+                </div>
+              )}
+
+              {csvImportModal.preview && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-black text-slate-300 uppercase tracking-wider">
+                      Preview ({csvImportModal.preview.length} rows)
+                    </h4>
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        csvImportModal.preview.every(p => p.status === 'Valid')
+                          ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                          : 'bg-amber-950 text-amber-300 border border-amber-800'
+                      }`}>
+                        {csvImportModal.preview.filter(p => p.status === 'Valid').length} Valid / {csvImportModal.preview.filter(p => p.status === 'Invalid').length} Invalid
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="overflow-x-auto max-h-64 overflow-y-auto">
+                    <table className="w-full text-left text-[10px]">
+                      <thead className="bg-slate-900 text-slate-400 font-mono text-[9px] uppercase border-b border-slate-800 sticky top-0">
+                        <tr>
+                          <th className="p-2">Row</th>
+                          <th className="p-2">Team Name</th>
+                          <th className="p-2">Leader Email</th>
+                          <th className="p-2">Amount</th>
+                          <th className="p-2">UTR</th>
+                          <th className="p-2">Status</th>
+                          <th className="p-2">Errors</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800/60">
+                        {csvImportModal.preview.map((row) => (
+                          <tr key={row.rowIndex} className={row.status === 'Invalid' ? 'bg-red-950/20' : 'bg-slate-950/50'}>
+                            <td className="p-2 font-mono text-slate-400">{row.rowIndex}</td>
+                            <td className="p-2 text-white font-bold">{row.teamName}</td>
+                            <td className="p-2 text-slate-300">{row.leaderEmail}</td>
+                            <td className="p-2 font-mono text-emerald-400">{row.amount}</td>
+                            <td className="p-2 font-mono text-amber-300">{row.utr}</td>
+                            <td className="p-2">
+                              <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
+                                row.status === 'Valid'
+                                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                  : 'bg-red-950 text-red-400 border border-red-800'
+                              }`}>
+                                {row.status}
+                              </span>
+                            </td>
+                            <td className="p-2 text-red-300">
+                              {row.errors.length > 0 ? (
+                                <div className="space-y-0.5">
+                                  {row.errors.map((err, idx) => (
+                                    <div key={idx}>• {err}</div>
+                                  ))}
+                                </div>
+                              ) : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {csvImportModal.preview.every(p => p.status === 'Valid') && (
+                    <div className="flex items-center gap-2 pt-2">
+                      <button
+                        onClick={handleCsvImport}
+                        disabled={csvImportModal.importing}
+                        className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-xs flex items-center gap-2 shadow-lg disabled:opacity-50"
+                      >
+                        {csvImportModal.importing ? (
+                          <>Importing...</>
+                        ) : (
+                          <>✓ Confirm Import {csvImportModal.preview.length} Team(s)</>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false })}
+                        className="px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 text-xs font-bold"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {!csvImportModal.preview && !csvImportModal.validationError && (
+                <div className="p-8 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-3">
+                  <Upload className="w-10 h-10 text-slate-600 mx-auto" />
+                  <p className="text-xs text-slate-400">Click <strong className="text-white">Upload CSV</strong> in the Finance tab to select a CSV file, or drag and drop.</p>
+                  <p className="text-[10px] text-slate-500">Required columns: Team Name, Select the Domain, College, Accommodation, Team Leader Full Name, Team Leader Email ID, Team Leader WhatsApp Number, Number of Teammates, Participant 2-4 (Name/Email/Phone), Transaction ID / UTR Number, Payment Slip</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+      </div>
+    );
+  };
+
