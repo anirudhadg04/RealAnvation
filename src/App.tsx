@@ -85,51 +85,6 @@ export default function App() {
     }
   };
 
-  const fetchHomeSections = async () => {
-    try {
-      const res = await fetch('/api/cms-config');
-      const data = await res.json();
-      if (data.success && data.config && data.config.homeSections) {
-        const s = data.config.homeSections;
-        setHomeSections({
-          hero: s.hero !== false,
-          about: s.about !== false,
-          themes: s.themes !== false,
-          schedule: s.schedule !== false,
-          prizes: s.prizes !== false,
-          sponsors: s.sponsors !== false,
-          faq: s.faq !== false,
-          contact: s.contact !== false
-        });
-      }
-    } catch (err) {
-      console.error('Failed to fetch home sections:', err);
-    }
-  };
-
-  useEffect(() => {
-    fetchLiveStats();
-    fetchHomeSections();
-    const sectionsTimer = setInterval(() => {
-      fetchHomeSections();
-    }, 4000);
-
-    const handleScroll = () => {
-      const totalHeight = document.documentElement.scrollHeight - window.innerHeight;
-      if (totalHeight > 0) {
-        const currentProgress = (window.scrollY / totalHeight) * 100;
-        setScrollProgress(currentProgress);
-      }
-      setShowScrollTop(window.scrollY > 400);
-    };
-
-    window.addEventListener('scroll', handleScroll);
-    return () => {
-      window.removeEventListener('scroll', handleScroll);
-      clearInterval(sectionsTimer);
-    };
-  }, []);
-
   const handleRegistrationSuccess = () => {
     fetchLiveStats();
   };

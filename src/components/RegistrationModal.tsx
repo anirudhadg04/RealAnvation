@@ -57,8 +57,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     field?: string;
     message?: string;
   } | null>(null);
-  const [duplicateFieldErrors, setDuplicateFieldErrors] = useState<Record<string, string>>({});
-  const [checkingDuplicates, setCheckingDuplicates] = useState(false);
 
   const paymentScreenshotInputRef = useRef<HTMLInputElement | null>(null);
   const paymentScreenshotReadRef = useRef(0);
@@ -150,8 +148,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     setPaymentConfirmed(false);
     setPaymentFailError(null);
     setShowPaymentFailModal(false);
-    setDuplicateFieldErrors({});
-    setCheckingDuplicates(false);
     setRegisteredTeam(null);
     setIsEditingSlip(false);
     setEditSlipForm(null);
@@ -294,63 +290,19 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   const isStep3Valid =
     isLeaderValid && areAllMembersFilled && !hasDuplicateEmail && !hasDuplicateUsn && !hasDuplicatePhone;
 
-  const checkRegistrationDuplicates = async (includeParticipants: boolean): Promise<boolean> => {
-    setCheckingDuplicates(true);
-    setDuplicateFieldErrors({});
-    try {
-      const response = await fetch('/api/registration/check-duplicates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          teamName,
-          domain,
-          ...(includeParticipants ? { leader, members } : {}),
-        }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data?.error || `Duplicate check failed with HTTP ${response.status}.`);
-      }
-      const conflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
-      if (conflicts.length > 0) {
-        setDuplicateFieldErrors(
-          conflicts.reduce(
-            (errors: Record<string, string>, conflict: { field?: string; message?: string }) => {
-              if (conflict.field)
-                errors[conflict.field] = conflict.message || 'This value is already registered.';
-              return errors;
-            },
-            {}
-          )
-        );
-        return false;
-      }
-      return true;
-    } catch (error) {
-      setDuplicateFieldErrors({
-        form:
-          error instanceof Error
-            ? error.message
-            : 'Could not check existing registrations. Please retry before continuing.',
-      });
-      return false;
-    } finally {
-      setCheckingDuplicates(false);
-    }
+  const handleStep1Next = () => {
+    if (teamName.trim()) setStep(2);
   };
 
-  const handleStep1Next = async () => {
-    if (teamName.trim() && (await checkRegistrationDuplicates(false))) setStep(2);
-  };
-
-  const handleStep3Next = async () => {
+  const handleStep3Next = () => {
     if (!isStep3Valid) {
-      setDuplicateFieldErrors({
-        form: 'Complete every required participant field with a valid Gmail address and exactly 10-digit phone number before continuing.',
+      setDuplicateErrorInfo({
+        isDuplicate: false,
+        message: 'Complete every required participant field with a valid Gmail address and exactly 10-digit phone number before continuing.',
       });
       return;
     }
-    if (await checkRegistrationDuplicates(true)) setStep(4);
+    setStep(4);
   };
 
   const handleSubmitRegistration = async (confirmedUtr?: string) => {
@@ -691,9 +643,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                     className="w-full px-4 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:border-cyan-500 focus:outline-none"
                     id="reg-team-name-input"
                   />
-                  {duplicateFieldErrors.teamName && (
-                    <p className="mt-1 text-xs text-red-400">{duplicateFieldErrors.teamName}</p>
-                  )}
                 </div>
 
                 <div>
@@ -728,7 +677,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                 </div>
 
                 <button
-                  disabled={!teamName.trim() || checkingDuplicates}
+                  disabled={!teamName.trim()}
                   onClick={handleStep1Next}
                   className="w-full py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-sm shadow-lg hover:from-cyan-400 hover:to-blue-500 disabled:opacity-50 flex items-center justify-center gap-2"
                   id="reg-step1-next-btn"
@@ -795,11 +744,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                       className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
                       id="reg-leader-email-input"
                     />
-                    {duplicateFieldErrors['leader.email'] && (
-                      <p className="mt-1 text-xs text-red-400">
-                        {duplicateFieldErrors['leader.email']}
-                      </p>
-                    )}
                   </div>
 
                   <div>
@@ -815,11 +759,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                       className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
                       id="reg-leader-usn-input"
                     />
-                    {duplicateFieldErrors['leader.usn'] && (
-                      <p className="mt-1 text-xs text-red-400">
-                        {duplicateFieldErrors['leader.usn']}
-                      </p>
-                    )}
                   </div>
 
                   <div>
@@ -851,27 +790,22 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                       className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
                       id="reg-leader-phone-input"
                     />
-                    {duplicateFieldErrors['leader.phone'] && (
-                      <p className="mt-1 text-xs text-red-400">
-                        {duplicateFieldErrors['leader.phone']}
-                      </p>
-                    )}
                   </div>
 
                   <div>
-  <label className="block text-xs font-bold text-slate-300 mb-1">Gender</label>
-  <select
-    value={leader.gender || ''}
-    onChange={(e) => setLeader({ ...leader, gender: e.target.value })}
-    className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
-  >
-    <option value="">Select Gender</option>
-    <option value="Male">Male</option>
-    <option value="Female">Female</option>
-    <option value="Other">Other</option>
-    <option value="Prefer not to say">Prefer not to say</option>
-  </select>
-</div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">Gender</label>
+                    <select
+                      value={leader.gender || ''}
+                      onChange={(e) => setLeader({ ...leader, gender: e.target.value })}
+                      className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
+                    >
+                      <option value="">Select Gender</option>
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                      <option value="Other">Other</option>
+                      <option value="Prefer not to say">Prefer not to say</option>
+                    </select>
+                  </div>
 
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">
@@ -938,12 +872,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   )}
                 </div>
 
-                {/* Validation warnings for duplicates or missing fields */}
-                {duplicateFieldErrors.form && (
-                  <div className="p-2.5 rounded-xl bg-red-950/40 border border-red-500/50 text-red-300 text-xs">
-                    {duplicateFieldErrors.form}
-                  </div>
-                )}
                 {hasDuplicateEmail && (
                   <div className="p-2.5 rounded-xl bg-amber-950/40 border border-amber-500/40 text-amber-200 text-xs flex items-center gap-2">
                     <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -1039,11 +967,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                             pattern="[^\s@]+@gmail\.com"
                             className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
                           />
-                          {duplicateFieldErrors[`members.${idx}.email`] && (
-                            <p className="mt-1 text-xs text-red-400">
-                              {duplicateFieldErrors[`members.${idx}.email`]}
-                            </p>
-                          )}
                         </div>
 
                         <div>
@@ -1058,11 +981,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                             placeholder="1KG23CS012"
                             className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
                           />
-                          {duplicateFieldErrors[`members.${idx}.usn`] && (
-                            <p className="mt-1 text-xs text-red-400">
-                              {duplicateFieldErrors[`members.${idx}.usn`]}
-                            </p>
-                          )}
                         </div>
 
                         <div>
@@ -1093,11 +1011,6 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                             pattern="[0-9]{10}"
                             className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs"
                           />
-                          {duplicateFieldErrors[`members.${idx}.phone`] && (
-                            <p className="mt-1 text-xs text-red-400">
-                              {duplicateFieldErrors[`members.${idx}.phone`]}
-                            </p>
-                          )}
                         </div>
 
                         <div>
@@ -1165,7 +1078,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    disabled={checkingDuplicates}
+                    disabled={!isStep3Valid}
                     onClick={handleStep3Next}
                     className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs shadow-lg disabled:opacity-50 flex items-center justify-center gap-2 transition-all"
                     id="reg-step3-next-btn"

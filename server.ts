@@ -1100,25 +1100,6 @@ export async function startServer(options: { listen?: boolean } = {}) {
     return conflicts;
   }
 
-  app.post("/api/registration/check-duplicates", (req, res) => {
-    const check = async () => {
-      const conflicts = checkRegistrationDuplicates(req.body);
-      const productionConflict = await findProductionDuplicate({
-        teamName: req.body?.teamName,
-        participants: [req.body?.leader, ...(Array.isArray(req.body?.members) ? req.body.members : [])]
-      });
-      if (productionConflict && !conflicts.some((conflict) => conflict.code === productionConflict.code)) {
-        conflicts.push({
-          code: productionConflict.code,
-          field: productionConflict.code === 'TEAM_NAME_EXISTS' ? 'teamName' : productionConflict.code === 'EMAIL_EXISTS' ? 'leader.email' : productionConflict.code === 'USN_EXISTS' ? 'leader.usn' : 'leader.phone',
-          message: `The ${productionConflict.code.replace('_EXISTS', '').toLowerCase()} is already registered.`
-        });
-      }
-      return res.json({ success: conflicts.length === 0, conflicts });
-    };
-    return check().catch(() => res.status(503).json({ success: false, error: 'Production registration storage is unavailable.' }));
-  });
-
   const validRegistrationDomains = new Set(HACKATHON_TRACKS.map((track) => track.title));
 
   // Registration payload and uniqueness validation

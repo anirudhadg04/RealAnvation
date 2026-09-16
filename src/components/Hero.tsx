@@ -19,18 +19,6 @@ interface HeroProps {
 export const Hero: React.FC<HeroProps> = ({ liveStats }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Live CMS State
-  const [cms, setCms] = useState({
-    eventName: "ANVATION 2026",
-    eventSubName: "explore, innovate, transform",
-    collegeName: "K. S. SCHOOL OF ENGINEERING AND MANAGEMENT",
-    departmentName: "DEPARTMENT OF COMPUTER SCIENCE AND ENGINEERING",
-    eventDates: "8TH - 9TH OCTOBER 2026",
-    venueLocation: "KSSEM Campus, Kanakapura Road, Bengaluru",
-    totalPrizePool: "₹50,000",
-    registrationOpen: true
-  });
-
   const requirementItems = [
     { title: 'OPPORTUNITIES', text: 'Internship', accent: 'emerald' },
     { title: 'CERTIFICATES', text: 'Winning and Participation Certificates', accent: 'sky' },
@@ -46,16 +34,6 @@ export const Hero: React.FC<HeroProps> = ({ liveStats }) => {
   });
 
   useEffect(() => {
-    // Fetch live CMS configuration
-    fetch('/api/cms-config')
-      .then(res => res.json())
-      .then(data => {
-        if (data.config) {
-          setCms(data.config);
-        }
-      })
-      .catch(err => console.error(err));
-
     // Target Date: October 8, 2026 09:30:00 IST
     const targetDate = new Date('2026-10-08T09:30:00+05:30').getTime();
 
