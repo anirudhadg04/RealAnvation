@@ -3529,6 +3529,9 @@ export const AdminPortal: React.FC = () => {
                     <Download className="w-3.5 h-3.5" /> Export Financial Report
                   </button>
                 </div>
+
+                {/* Hidden CSV file input — kept mounted so the Import button can open the native picker */ }
+                <input ref={csvFileRef} type="file" accept=".csv" className="hidden" onChange={handleCsvFileChange} />
               </div>
 
               {/* Finance Overview Cards */}
@@ -4325,8 +4328,6 @@ export const AdminPortal: React.FC = () => {
                   <X className="w-5 h-5" />
                 </button>
               </div>
-
-              <input ref={csvFileRef} type="file" accept=".csv" className="hidden" onChange={handleCsvFileChange} />
 
               {csvImportModal.file && (
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300">
