@@ -12,7 +12,6 @@ import QRCode from "qrcode";
 import sharp from "sharp";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
-import { createWorker } from "tesseract.js";
 import { createServer as createViteServer } from "vite";
 import { SEED_ANNOUNCEMENTS, SPONSORS } from "./src/data/mockData";
 import { Team, ProjectSubmission, JudgeScorecard, Announcement, SupportTicket, Participant, MilestoneReport, MentorBooking, WebsiteCMSConfig, AuditLog, AdminUser, AdminRole, RulebookVersion, EmailCampaign, RoomAllocation, JudgingRound, ScheduleItem, Checkpoint, Sponsor } from "./src/types";
@@ -22,41 +21,6 @@ import { ensureProductionSchema, findProductionDuplicate, loadProductionTeams, p
 import { resolveAdminBootstrapPassword } from "./src/utils/adminAuth";
 
 const execFileAsync = promisify(execFile);
-
-let paymentOcrWorkerPromise: Promise<any> | null = null;
-
-async function readPaymentProofText(imageBytes: Buffer): Promise<string> {
-  if (!paymentOcrWorkerPromise) {
-    paymentOcrWorkerPromise = createWorker("eng").catch((error) => {
-      paymentOcrWorkerPromise = null;
-      throw error;
-    });
-  }
-  const worker = await paymentOcrWorkerPromise;
-  const normalized = sharp(imageBytes, { failOn: "none" });
-  const metadata = await normalized.metadata();
-  const width = Math.max(metadata.width || 0, 1200);
-  const height = metadata.height ? Math.round((metadata.height * width) / (metadata.width || width)) : width;
-  
-  // Single optimized variant - grayscale + normalize + sharpen for best digit recognition
-  const optimized = await normalized
-    .clone()
-    .resize({ width })
-    .grayscale()
-    .normalize()
-    .sharpen()
-    .png()
-    .toBuffer();
-
-  // Single recognition with optimized settings for digits/numbers
-  const result = await worker.recognize(optimized, {
-    tessedit_pageseg_mode: "6",
-    tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz:./-# ",
-    preserve_interword_spaces: "1"
-  } as any);
-
-  return String(result?.data?.text || "").trim();
-}
 
 declare global {
   namespace Express {
@@ -2046,42 +2010,11 @@ export async function startServer(options: { listen?: boolean } = {}) {
   // Verify PhonePe Payment Endpoint
   app.post("/api/verify-payment", async (req, res) => {
     try {
-      const { utr, paymentScreenshot } = req.body;
+      const { extractTransactionIdsFromText, ocrContainsTransactionId } = await import("./src/utils/upiVerification");
+      
+      const { utr, paymentScreenshot, ocrText, utrCandidates } = req.body;
       const cleanUtr = (utr ? String(utr).trim() : '');
       const validUtrPattern = /^[0-9]{12}$/;
-      const screenshotMatch = typeof paymentScreenshot === 'string'
-        ? paymentScreenshot.match(/^data:(image\/(?:png|jpeg|gif|webp));base64,([A-Za-z0-9+/=]+)$/i)
-        : null;
-
-      if (!screenshotMatch) {
-        return res.status(400).json({
-          success: false,
-          verified: false,
-          error: "Payment verification failed: the uploaded proof is missing or is not a supported PNG, JPG, GIF, or WebP image."
-        });
-      }
-
-      const screenshotBytes = Buffer.from(screenshotMatch[2], "base64");
-      if (screenshotBytes.length === 0 || screenshotBytes.length > 8 * 1024 * 1024) {
-        return res.status(400).json({
-          success: false,
-          verified: false,
-          error: "Payment verification failed: the screenshot must be under 8 MB and contain image data."
-        });
-      }
-
-      const isPng = screenshotBytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-      const isJpeg = screenshotBytes.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
-      const isGif = screenshotBytes.subarray(0, 3).toString("ascii") === "GIF";
-      const isWebp = screenshotBytes.subarray(0, 4).toString("ascii") === "RIFF"
-        && screenshotBytes.subarray(8, 12).toString("ascii") === "WEBP";
-      if (!isPng && !isJpeg && !isGif && !isWebp) {
-        return res.status(400).json({
-          success: false,
-          verified: false,
-          error: "Payment verification failed: the uploaded file does not contain valid image data."
-        });
-      }
 
       if (!cleanUtr) {
         return res.status(400).json({
@@ -2099,27 +2032,39 @@ export async function startServer(options: { listen?: boolean } = {}) {
         });
       }
 
-      let proofText = "";
-      try {
-        proofText = await readPaymentProofText(screenshotBytes);
-        console.log("[PAYMENT OCR DEBUG] Extracted text:", JSON.stringify(proofText));
-      } catch (ocrError: any) {
-        console.error("[PAYMENT OCR] Could not read payment screenshot:", ocrError?.message || ocrError);
-        return res.status(503).json({
+      // Validate screenshot is present (even if we don't run OCR on it server-side)
+      if (!paymentScreenshot) {
+        return res.status(400).json({
           success: false,
           verified: false,
-          error: "Payment proof could not be read right now. Please retry once the verification service is available."
+          error: "Payment screenshot is required for verification."
         });
       }
 
-      const verificationResult = ocrContainsTransactionId(proofText, cleanUtr);
+      // Use client-provided OCR candidates only — no server-side OCR fallback
+      const candidates = (utrCandidates && Array.isArray(utrCandidates) && utrCandidates.length > 0)
+        ? utrCandidates.map((c: string) => String(c).trim()).filter((c: string) => /^\d{12}$/.test(c))
+        : [];
+      const proofText = ocrText || "";
+
+      if (candidates.length === 0) {
+        return res.status(400).json({
+          success: false,
+          verified: false,
+          error: "Could not detect the UTR from the screenshot. Please upload a clearer payment screenshot."
+        });
+      }
+
+      const verificationResult = ocrContainsTransactionId(proofText || candidates.join(" "), cleanUtr);
+      
       if (!verificationResult.matched) {
         return res.status(400).json({
           success: false,
           verified: false,
-          error: verificationResult.error || "The uploaded payment screenshot does not contain the exact 12-digit transaction ID you entered. Please upload the receipt for this transaction."
+          error: verificationResult.error || "The UTR entered does not match the UTR detected in the payment screenshot."
         });
       }
+
       res.json({
         success: true,
         verified: true,

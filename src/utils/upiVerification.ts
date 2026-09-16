@@ -30,7 +30,7 @@ function fuzzyMatchUtr(candidate: string, target: string): boolean {
 
 // Extract all 12-digit numbers from OCR text (UTR candidates)
 // ONLY the UTR is authoritative - recipient UPI ID, bank names, etc. are ignored
-export function extractTransactionIds(ocrText: string): string[] {
+export function extractTransactionIdsFromText(ocrText: string): string[] {
   const normalized = normalizeOcrDigits(ocrText);
   const matches = normalized.match(TRANSACTION_ID_PATTERN);
   if (!matches) return [];
@@ -38,7 +38,7 @@ export function extractTransactionIds(ocrText: string): string[] {
 }
 
 export function ocrContainsTransactionId(ocrText: string, transactionId: string): { matched: boolean; detectedUtr?: string; error?: string } {
-  const candidates = extractTransactionIds(ocrText);
+  const candidates = extractTransactionIdsFromText(ocrText);
   
   if (candidates.length === 0) {
     return { matched: false, error: "Could not detect the UTR from the screenshot. Please upload a clearer payment screenshot." };

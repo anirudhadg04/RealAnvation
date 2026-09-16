@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { PhonePeQRCode } from './PhonePeQRCode';
 import { PAYMENT_UPI_ID } from '../utils/upiVerification';
+import { extractUtrFromImage, extractTransactionIdsFromText } from '../utils/clientOcr';
 import confetti from 'canvas-confetti';
 
 interface RegistrationModalProps {
@@ -466,6 +467,34 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
     setPaymentFailError(null);
 
     try {
+      // Step 1: Perform OCR locally in the browser
+      let ocrText = "";
+      let utrCandidates: string[] = [];
+      
+      // Convert base64 data URL to File for client-side OCR
+      const base64Data = paymentScreenshotData.split(',')[1];
+      if (base64Data) {
+        const binaryString = atob(base64Data);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const mimeMatch = paymentScreenshotData.match(/^data:(image\/(?:png|jpeg|gif|webp));base64,/i);
+        const mimeType = mimeMatch ? mimeMatch[1] : 'image/png';
+        const imageFile = new File([bytes], 'payment_screenshot.png', { type: mimeType });
+        
+        try {
+          const result = await extractUtrFromImage(imageFile);
+          ocrText = result.text;
+          utrCandidates = result.utrCandidates;
+          console.log("[CLIENT OCR] Extracted text:", ocrText);
+          console.log("[CLIENT OCR] UTR candidates:", utrCandidates);
+        } catch (ocrError: any) {
+          console.error("[CLIENT OCR] Failed to extract UTR from screenshot:", ocrError);
+          // Server will reject if no candidates are provided (no server-side OCR fallback)
+        }
+      }
+
       const res = await fetch('/api/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -473,6 +502,8 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
           utr: utrToVerify,
           participantCount: 1 + members.length,
           paymentScreenshot: paymentScreenshotData,
+          ocrText,
+          utrCandidates,
         }),
       });
 
