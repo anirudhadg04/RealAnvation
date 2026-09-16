@@ -1119,6 +1119,7 @@ export const AdminPortal: React.FC = () => {
   };
 
   const [csvContent, setCsvContent] = useState<string>('');
+  const [csvValidating, setCsvValidating] = useState(false);
   const csvFileRef = React.useRef<HTMLInputElement>(null);
 
   const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1128,12 +1129,14 @@ export const AdminPortal: React.FC = () => {
     reader.onload = (ev) => {
       const text = String(ev.target?.result || '');
       setCsvContent(text);
+      setCsvValidating(false);
       setCsvImportModal({ open: true, file, preview: null, validationError: null, importing: false });
     };
     reader.readAsText(file);
   };
 
   const handleCsvValidate = async () => {
+    setCsvValidating(true);
     setCsvImportModal(prev => ({ ...prev, preview: null, validationError: null }));
     try {
       const res = await fetch('/api/admin/import-csv', {
@@ -1156,6 +1159,8 @@ export const AdminPortal: React.FC = () => {
       }
     } catch (err) {
       setCsvImportModal(prev => ({ ...prev, validationError: 'Network error during validation.' }));
+    } finally {
+      setCsvValidating(false);
     }
   };
 
@@ -3518,7 +3523,7 @@ export const AdminPortal: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => csvFileRef.current?.click()} className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 border border-emerald-700/60 text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                    <Upload className="w-3.5 h-3.5" /> Upload CSV
+                    <Upload className="w-3.5 h-3.5" /> Import Participants CSV
                   </button>
                   <button onClick={() => exportCSV(teams, 'KS_HACKNOVE_FINANCE')} className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-white flex items-center gap-1.5">
                     <Download className="w-3.5 h-3.5" /> Export Financial Report
@@ -3557,17 +3562,18 @@ export const AdminPortal: React.FC = () => {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
-                      <tr>
-                        <th className="p-3">Team ID & Name</th>
-                        <th className="p-3">Leader Email</th>
-                        <th className="p-3">Amount</th>
-                        <th className="p-3">Payment Detail</th>
-                        <th className="p-3">UTR Reference No</th>
-                        <th className="p-3">Screenshot</th>
-                        <th className="p-3">Status</th>
-                        <th className="p-3">Team Status</th>
-                        <th className="p-3">Action</th>
-                      </tr>
+<tr>
+                         <th className="p-3">Team ID &amp; Name</th>
+                         <th className="p-3">Leader Email</th>
+                         <th className="p-3">Participants</th>
+                         <th className="p-3">Amount</th>
+                         <th className="p-3">Payment Detail</th>
+                         <th className="p-3">UTR Reference No</th>
+                         <th className="p-3">Screenshot</th>
+                         <th className="p-3">Status</th>
+                         <th className="p-3">Team Status</th>
+                         <th className="p-3">Action</th>
+                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800 font-sans">
                       {teams.map((t) => (
@@ -3576,8 +3582,20 @@ export const AdminPortal: React.FC = () => {
                             <div>{t.teamName}</div>
                             <div className="font-mono text-[10px] text-cyan-400">{t.id}</div>
                           </td>
-                          <td className="p-3 text-slate-300 text-[11px]">{t.leaderEmail}</td>
-                          <td className="p-3 font-mono font-bold text-emerald-400">₹{t.members.length * (cmsConfig.registrationFee || 250)}</td>
+<td className="p-3 text-slate-300 text-[11px]">{t.leaderEmail}</td>
+                           <td className="p-3">
+                             <div className="flex -space-x-2">
+                               {t.members.slice(0, 3).map((m, idx) => (
+                                 <span key={m.id} className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-[9px] font-bold text-slate-300 flex items-center justify-center" title={m.fullName}>
+                                   {m.fullName?.charAt(0) || '?'}
+                                 </span>
+                               ))}
+                               {t.members.length > 3 && (
+                                 <span className="w-6 h-6 rounded-full bg-slate-950 border border-slate-700 text-[9px] font-bold text-slate-400 flex items-center justify-center">+{t.members.length - 3}</span>
+                               )}
+                             </div>
+                           </td>
+                           <td className="p-3 font-mono font-bold text-emerald-400">₹{t.members.length * (cmsConfig.registrationFee || 250)}</td>
                           <td className="p-3 text-slate-300 text-[11px] min-w-48">{t.paymentAmountDetail || 'Not specified'}</td>
                           <td className="p-3 font-mono text-amber-300 font-bold">{t.paymentUtr || 'N/A'}</td>
                           <td className="p-3">
