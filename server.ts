@@ -2112,11 +2112,12 @@ export async function startServer(options: { listen?: boolean } = {}) {
         });
       }
 
-      if (!ocrContainsTransactionId(proofText, cleanUtr)) {
+      const verificationResult = ocrContainsTransactionId(proofText, cleanUtr);
+      if (!verificationResult.matched) {
         return res.status(400).json({
           success: false,
           verified: false,
-          error: "The uploaded payment screenshot does not contain the exact 12-digit transaction ID you entered. Please upload the receipt for this transaction."
+          error: verificationResult.error || "The uploaded payment screenshot does not contain the exact 12-digit transaction ID you entered. Please upload the receipt for this transaction."
         });
       }
       res.json({
