@@ -251,7 +251,7 @@ export const RegistrationModal: React.FC<RegistrationModalProps> = ({
   );
 
   const areAllMembersFilled =
-    members.length >= 2 &&
+    members.length >= 1 &&
     members.length <= 3 &&
     members.every((m) =>
       Boolean(
