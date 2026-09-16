@@ -3634,22 +3634,42 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         team_name: ["team name"],
         domain: ["select the domain"],
         college: ["college"],
+        city: ["city"],
+        district: ["district"],
+        state: ["states"],
         accommodation: ["accommodation"],
         leader_full_name: ["team leader full name"],
+        leader_department: ["team leader department"],
+        leader_semester: ["team leader semester"],
         leader_email: ["team leader email id"],
         leader_phone: ["team leader whatsapp number"],
+        leader_gender: ["team leader gender"],
+        leader_college_id: ["team leader college id card"],
         num_teammates: ["number of teammates"],
         p2_full_name: ["participant 2 full name"],
+        p2_department: ["participant 2 department"],
+        p2_semester: ["participant 2 semester"],
         p2_email: ["participant 2 email id"],
         p2_phone: ["participant 2 phone number"],
+        p2_gender: ["participant 2 gender"],
+        p2_college_id: ["participant 2 college id card"],
         p3_full_name: ["participant 3 full name"],
+        p3_department: ["participant 3 department"],
+        p3_semester: ["participant 3 semester"],
         p3_email: ["participant 3 email id"],
         p3_phone: ["participant 3 phone number"],
+        p3_gender: ["participant 3 gender"],
+        p3_college_id: ["participant 3 college id card"],
         p4_full_name: ["participant 4 full name"],
+        p4_department: ["participant 4 department"],
+        p4_semester: ["participant 4 semester"],
         p4_email: ["participant 4 email id"],
         p4_phone: ["participant 4 phone number"],
+        p4_gender: ["participant 4 gender"],
+        p4_college_id: ["participant 4 college id card"],
         utr: ["transaction id / utr number"],
-        payment_screenshot: ["payment slip"]
+        payment_screenshot: ["payment slip"],
+        payment_confirmation: ["payment confirmation"]
       };
 
       const fieldMap: Record<string, number> = {};
@@ -3676,6 +3696,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       const preview: PreviewRow[] = [];
       const csvEmails = new Set<string>();
       const csvPhones = new Set<string>();
+      const csvUsns = new Set<string>();
       const csvUtrs = new Set<string>();
       const csvTeamNames = new Set<string>();
 
@@ -3687,25 +3708,46 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         const teamName = (row[fieldMap["team_name"]] || "").trim();
         const domain = (row[fieldMap["domain"]] || "").trim();
         const college = (row[fieldMap["college"]] || "").trim();
+        const city = (row[fieldMap["city"]] || "").trim();
+        const district = (row[fieldMap["district"]] || "").trim();
+        const state = (row[fieldMap["state"]] || "").trim();
         const accommodation = (row[fieldMap["accommodation"]] || "").trim();
         const leaderFullName = (row[fieldMap["leader_full_name"]] || "").trim();
+        const leaderDepartment = (row[fieldMap["leader_department"]] || "").trim();
+        const leaderSemester = (row[fieldMap["leader_semester"]] || "").trim();
         const leaderEmail = (row[fieldMap["leader_email"]] || "").trim();
         const leaderPhone = (row[fieldMap["leader_phone"]] || "").trim();
+        const leaderGender = (row[fieldMap["leader_gender"]] || "").trim();
+        const leaderCollegeId = (row[fieldMap["leader_college_id"]] || "").trim();
         const numTeammatesStr = (row[fieldMap["num_teammates"]] || "").trim();
         const p2FullName = (row[fieldMap["p2_full_name"]] || "").trim();
+        const p2Department = (row[fieldMap["p2_department"]] || "").trim();
+        const p2Semester = (row[fieldMap["p2_semester"]] || "").trim();
         const p2Email = (row[fieldMap["p2_email"]] || "").trim();
         const p2Phone = (row[fieldMap["p2_phone"]] || "").trim();
+        const p2Gender = (row[fieldMap["p2_gender"]] || "").trim();
+        const p2CollegeId = (row[fieldMap["p2_college_id"]] || "").trim();
         const p3FullName = (row[fieldMap["p3_full_name"]] || "").trim();
+        const p3Department = (row[fieldMap["p3_department"]] || "").trim();
+        const p3Semester = (row[fieldMap["p3_semester"]] || "").trim();
         const p3Email = (row[fieldMap["p3_email"]] || "").trim();
         const p3Phone = (row[fieldMap["p3_phone"]] || "").trim();
+        const p3Gender = (row[fieldMap["p3_gender"]] || "").trim();
+        const p3CollegeId = (row[fieldMap["p3_college_id"]] || "").trim();
         const p4FullName = (row[fieldMap["p4_full_name"]] || "").trim();
+        const p4Department = (row[fieldMap["p4_department"]] || "").trim();
+        const p4Semester = (row[fieldMap["p4_semester"]] || "").trim();
         const p4Email = (row[fieldMap["p4_email"]] || "").trim();
         const p4Phone = (row[fieldMap["p4_phone"]] || "").trim();
+        const p4Gender = (row[fieldMap["p4_gender"]] || "").trim();
+        const p4CollegeId = (row[fieldMap["p4_college_id"]] || "").trim();
         const utr = (row[fieldMap["utr"]] || "").trim();
         const paymentSlip = (row[fieldMap["payment_screenshot"]] || "").trim();
+        const paymentConfirmation = (row[fieldMap["payment_confirmation"]] || "").trim();
 
         const numTeammates = parseInt(numTeammatesStr, 10);
         const cleanLeaderPhone = leaderPhone.replace(/[^0-9]/g, "");
+        const cleanLeaderCollegeId = leaderCollegeId.trim().toUpperCase();
         const cleanUtr = utr.toUpperCase();
 
         if (!teamName || teamName.length < 2 || teamName.length > 50) {
@@ -3721,14 +3763,23 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         if (cleanLeaderPhone.length !== 10 || !/^\d{10}$/.test(cleanLeaderPhone)) {
           errors.push("Leader phone number must contain exactly 10 digits.");
         }
+        if (!leaderGender) {
+          errors.push("Team leader gender is required.");
+        }
+        if (!leaderCollegeId) {
+          errors.push("Team leader college ID card is required.");
+        }
+        if (!state) {
+          errors.push("State is required.");
+        }
         if (numTeammates !== 2 && numTeammates !== 3) {
           errors.push("Number of teammates must be 2 or 3.");
         }
 
         const participantDefs = [
-          { name: p2FullName, email: p2Email, phone: p2Phone, idx: 2 },
-          { name: p3FullName, email: p3Email, phone: p3Phone, idx: 3 },
-          { name: p4FullName, email: p4Email, phone: p4Phone, idx: 4 },
+          { name: p2FullName, email: p2Email, phone: p2Phone, gender: p2Gender, collegeId: p2CollegeId, idx: 2 },
+          { name: p3FullName, email: p3Email, phone: p3Phone, gender: p3Gender, collegeId: p3CollegeId, idx: 3 },
+          { name: p4FullName, email: p4Email, phone: p4Phone, gender: p4Gender, collegeId: p4CollegeId, idx: 4 },
         ];
 
         for (let j = 0; j < numTeammates; j++) {
@@ -3741,6 +3792,12 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           if (cleanPhone.length !== 10 || !/^\d{10}$/.test(cleanPhone)) {
             errors.push(`Participant ${p.idx} phone number must contain exactly 10 digits.`);
           }
+          if (!p.gender) {
+            errors.push(`Participant ${p.idx} gender is required.`);
+          }
+          if (!p.collegeId) {
+            errors.push(`Participant ${p.idx} college ID card is required.`);
+          }
         }
 
         if (numTeammates === 2 && (p4FullName || p4Email || p4Phone)) {
@@ -3751,6 +3808,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           errors.push("UTR must be exactly 12 digits.");
         }
         if (!college) errors.push("College is required.");
+        if (!state) errors.push("State is required.");
 
         const accLower = accommodation.toLowerCase();
         if (accLower !== "" && accLower !== "yes" && accLower !== "no" && accLower !== "true" && accLower !== "false") {
@@ -3767,6 +3825,9 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         if (cleanLeaderPhone && csvPhones.has(cleanLeaderPhone)) {
           errors.push(`Duplicate phone "${cleanLeaderPhone}" within CSV.`);
         }
+        if (cleanLeaderCollegeId && csvUsns.has(cleanLeaderCollegeId)) {
+          errors.push(`Duplicate college ID "${cleanLeaderCollegeId}" within CSV.`);
+        }
         if (cleanUtr && csvUtrs.has(cleanUtr)) {
           errors.push(`Duplicate UTR "${cleanUtr}" within CSV.`);
         }
@@ -3774,6 +3835,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         csvTeamNames.add(normTeamName);
         if (leaderEmail) csvEmails.add(leaderEmail.toLowerCase());
         if (cleanLeaderPhone) csvPhones.add(cleanLeaderPhone);
+        if (cleanLeaderCollegeId) csvUsns.add(cleanLeaderCollegeId);
         if (cleanUtr) csvUtrs.add(cleanUtr);
 
         const amount = numTeammates === 2 ? "₹750" : "₹1000";
@@ -3789,9 +3851,13 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           status: errors.length > 0 ? 'Invalid' : 'Valid',
           errors,
           rowData: {
-            teamName, domain, college, accommodation, leaderFullName, leaderEmail, leaderPhone,
-            numTeammates, p2FullName, p2Email, p2Phone, p3FullName, p3Email, p3Phone,
-            p4FullName, p4Email, p4Phone, utr: cleanUtr, paymentSlip
+            teamName, domain, college, city, district, state, accommodation,
+            leaderFullName, leaderDepartment, leaderSemester, leaderEmail, leaderPhone, leaderGender, leaderCollegeId,
+            numTeammates,
+            p2FullName, p2Department, p2Semester, p2Email, p2Phone, p2Gender, p2CollegeId,
+            p3FullName, p3Department, p3Semester, p3Email, p3Phone, p3Gender, p3CollegeId,
+            p4FullName, p4Department, p4Semester, p4Email, p4Phone, p4Gender, p4CollegeId,
+            utr: cleanUtr, paymentSlip, paymentConfirmation
           }
         });
       }
@@ -3812,9 +3878,37 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           p.errors.push(`Leader phone "${cleanLeaderPhone}" already exists in database.`);
           p.status = 'Invalid';
         }
+        const cleanLeaderCollegeId = rd.leaderCollegeId.trim().toUpperCase();
+        if (cleanLeaderCollegeId && registeredUsns.has(cleanLeaderCollegeId)) {
+          p.errors.push(`Leader college ID "${cleanLeaderCollegeId}" already exists in database.`);
+          p.status = 'Invalid';
+        }
         if (rd.utr && registeredUtrs.has(rd.utr)) {
           p.errors.push(`UTR "${rd.utr}" already exists in database.`);
           p.status = 'Invalid';
+        }
+        // Check participant emails, phones, and college IDs against database
+        const participantDefs = [
+          { email: rd.p2Email, phone: rd.p2Phone, collegeId: rd.p2CollegeId, idx: 2 },
+          { email: rd.p3Email, phone: rd.p3Phone, collegeId: rd.p3CollegeId, idx: 3 },
+          { email: rd.p4Email, phone: rd.p4Phone, collegeId: rd.p4CollegeId, idx: 4 },
+        ];
+        for (let j = 0; j < rd.numTeammates; j++) {
+          const pdef = participantDefs[j];
+          if (pdef.email && registeredEmails.has(pdef.email.toLowerCase())) {
+            p.errors.push(`Participant ${pdef.idx} email "${pdef.email}" already exists in database.`);
+            p.status = 'Invalid';
+          }
+          const cleanPhone = pdef.phone.replace(/[^0-9]/g, "");
+          if (cleanPhone && registeredPhones.has(cleanPhone)) {
+            p.errors.push(`Participant ${pdef.idx} phone "${cleanPhone}" already exists in database.`);
+            p.status = 'Invalid';
+          }
+          const cleanCollegeId = pdef.collegeId.trim().toUpperCase();
+          if (cleanCollegeId && registeredUsns.has(cleanCollegeId)) {
+            p.errors.push(`Participant ${pdef.idx} college ID "${cleanCollegeId}" already exists in database.`);
+            p.status = 'Invalid';
+          }
         }
       }
 
@@ -3849,11 +3943,11 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           id: `p-${teamIndex}-1`,
           fullName: sanitizeInputString(rd.leaderFullName),
           college: sanitizeInputString(rd.college),
-          state: '',
+          state: sanitizeInputString(rd.state),
           email: rd.leaderEmail,
           phone: sanitizeInputString(rd.leaderPhone),
-          usn: '',
-          gender: '',
+          usn: sanitizeInputString(rd.leaderCollegeId.trim().toUpperCase()),
+          gender: sanitizeInputString(rd.leaderGender),
           role: 'Leader',
           teamId,
           accommodationRequired: rd.accommodation.toLowerCase() === 'yes' || rd.accommodation.toLowerCase() === 'true',
@@ -3863,9 +3957,9 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
 
         const members: Participant[] = [];
         const participantDefs = [
-          { name: rd.p2FullName, email: rd.p2Email, phone: rd.p2Phone },
-          { name: rd.p3FullName, email: rd.p3Email, phone: rd.p3Phone },
-          { name: rd.p4FullName, email: rd.p4Email, phone: rd.p4Phone },
+          { name: rd.p2FullName, email: rd.p2Email, phone: rd.p2Phone, gender: rd.p2Gender, collegeId: rd.p2CollegeId },
+          { name: rd.p3FullName, email: rd.p3Email, phone: rd.p3Phone, gender: rd.p3Gender, collegeId: rd.p3CollegeId },
+          { name: rd.p4FullName, email: rd.p4Email, phone: rd.p4Phone, gender: rd.p4Gender, collegeId: rd.p4CollegeId },
         ];
 
         for (let j = 0; j < rd.numTeammates; j++) {
@@ -3874,11 +3968,11 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
             id: `p-${teamIndex}-${j + 2}`,
             fullName: sanitizeInputString(p.name),
             college: sanitizeInputString(rd.college),
-            state: '',
+            state: sanitizeInputString(rd.state),
             email: p.email,
             phone: sanitizeInputString(p.phone),
-            usn: '',
-            gender: '',
+            usn: sanitizeInputString(p.collegeId.trim().toUpperCase()),
+            gender: sanitizeInputString(p.gender),
             role: 'Member',
             teamId,
             accommodationRequired: rd.accommodation.toLowerCase() === 'yes' || rd.accommodation.toLowerCase() === 'true',

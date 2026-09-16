@@ -197,6 +197,7 @@ export const AdminPortal: React.FC = () => {
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [isEditTeamModalOpen, setIsEditTeamModalOpen] = useState(false);
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
+  const [expandedLedgerTeams, setExpandedLedgerTeams] = useState<Set<string>>(new Set());
   const [scoreOverrideModal, setScoreOverrideModal] = useState<{ open: boolean; submissionId: string; currentScore: number; reason: string }>({
     open: false,
     submissionId: '',
@@ -3615,6 +3616,63 @@ export const AdminPortal: React.FC = () => {
                             >
                               Reject
                             </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = new Set(expandedLedgerTeams);
+                                if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
+                                setExpandedLedgerTeams(next);
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                            >
+                              <Eye className="w-3 h-3" />
+                              View Participants
+                            </button>
+                            {expandedLedgerTeams.has(t.id) && (
+                              <div className="mt-3 pt-3 border-t border-slate-800/60 space-y-2">
+                                {t.members.map((m, idx) => (
+                                  <div key={m.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
+                                    <div className="text-[10px] font-black uppercase tracking-wider text-white flex items-center gap-2">
+                                      {idx === 0 ? (
+                                        <span className="px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800">Team Leader</span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Participant {idx + 1}</span>
+                                      )}
+                                    </div>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
+                                      <div>
+                                        <span className="text-slate-500 font-bold block">Full Name</span>
+                                        <span className="text-white font-bold">{m.fullName || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 font-bold block">Department</span>
+                                        <span className="text-slate-300">{m.department || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 font-bold block">Semester</span>
+                                        <span className="text-slate-300">{m.semester || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 font-bold block">Email</span>
+                                        <span className="text-slate-300">{m.email || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 font-bold block">Phone</span>
+                                        <span className="text-slate-300">{m.phone || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 font-bold block">Gender</span>
+                                        <span className="text-slate-300">{m.gender || '—'}</span>
+                                      </div>
+                                      <div>
+                                        <span className="text-slate-500 font-bold block">College ID Card</span>
+                                        <span className="text-slate-300 font-mono">{m.usn || '—'}</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </td>
                         </tr>
                       ))}

@@ -10,6 +10,8 @@ export interface Participant {
   usn: string;
   role: 'Leader' | 'Member';
   gender?: 'Male' | 'Female' | 'Other' | 'Prefer not to say' | string;
+  department?: string;
+  semester?: string;
   teamId: string;
   accommodationRequired: boolean;
   checkedIn: boolean;
