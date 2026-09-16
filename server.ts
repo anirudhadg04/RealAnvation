@@ -35,35 +35,27 @@ async function readPaymentProofText(imageBytes: Buffer): Promise<string> {
   const worker = await paymentOcrWorkerPromise;
   const normalized = sharp(imageBytes, { failOn: "none" });
   const metadata = await normalized.metadata();
-  const width = Math.max(metadata.width || 0, 1600);
+  const width = Math.max(metadata.width || 0, 1200);
   const height = metadata.height ? Math.round((metadata.height * width) / (metadata.width || width)) : width;
-  const baseVariants = await Promise.all([
-    normalized.clone().resize({ width }).png().toBuffer(),
-    normalized.clone().resize({ width }).grayscale().normalize().sharpen().png().toBuffer(),
-    normalized.clone().resize({ width }).grayscale().normalize().threshold(180).png().toBuffer()
-  ]);
-  const regions = [
-    { left: 0, top: 0, width, height },
-    { left: 0, top: 0, width, height: Math.max(1, Math.round(height * 0.45)) },
-    { left: 0, top: Math.round(height * 0.28), width, height: Math.max(1, Math.round(height * 0.45)) },
-    { left: 0, top: Math.round(height * 0.55), width, height: Math.max(1, height - Math.round(height * 0.55)) }
-  ];
-  const texts: string[] = [];
-  for (const variant of baseVariants) {
-    for (const [regionIndex, region] of regions.entries()) {
-      const regionImage = regionIndex === 0
-        ? variant
-        : await sharp(variant).extract(region).png().toBuffer();
-      const pageSegmentationMode = regionIndex === 0 ? "6" : "11";
-      const result = await worker.recognize(regionImage, {
-        tessedit_pageseg_mode: pageSegmentationMode
-      } as any);
-      const text = String(result?.data?.text || "").trim();
-      if (text) texts.push(text);
+  
+  // Single optimized variant - grayscale + normalize + sharpen for best digit recognition
+  const optimized = await normalized
+    .clone()
+    .resize({ width })
+    .grayscale()
+    .normalize()
+    .sharpen()
+    .png()
+    .toBuffer();
 
-    }
-  }
-  return texts.join("\n");
+  // Single recognition with optimized settings for digits/numbers
+  const result = await worker.recognize(optimized, {
+    tessedit_pageseg_mode: "6",
+    tessedit_char_whitelist: "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz:./-# ",
+    preserve_interword_spaces: "1"
+  } as any);
+
+  return String(result?.data?.text || "").trim();
 }
 
 declare global {
