@@ -4335,6 +4335,22 @@ export const AdminPortal: React.FC = () => {
                 </div>
               )}
 
+              {csvImportModal.file && !csvImportModal.preview && !csvImportModal.validationError && (
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                  <div className="flex items-center gap-2 text-xs text-slate-300">
+                    <FileText className="w-4 h-4 text-emerald-400" />
+                    <span>CSV selected. Click <strong className="text-white">Parse &amp; Validate</strong> to check the file.</span>
+                  </div>
+                  <button
+                    onClick={handleCsvValidate}
+                    disabled={csvValidating}
+                    className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-xs flex items-center gap-2 shadow-lg disabled:opacity-50"
+                  >
+                    {csvValidating ? 'Validating...' : 'Parse & Validate'}
+                  </button>
+                </div>
+              )}
+
               {csvImportModal.validationError && !csvImportModal.preview && (
                 <div className="p-3 rounded-xl bg-red-950/60 border border-red-500/50 text-xs text-red-200 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
@@ -4428,7 +4444,7 @@ export const AdminPortal: React.FC = () => {
                 </div>
               )}
 
-              {!csvImportModal.preview && !csvImportModal.validationError && (
+              {!csvImportModal.file && !csvImportModal.preview && !csvImportModal.validationError && (
                 <div className="p-8 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-3">
                   <Upload className="w-10 h-10 text-slate-600 mx-auto" />
                   <p className="text-xs text-slate-400">Click <strong className="text-white">Upload CSV</strong> in the Finance tab to select a CSV file, or drag and drop.</p>
