@@ -3615,7 +3615,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
   });
 
   // CSV Import Endpoint
-  app.post("/api/admin/import-csv", requireAdmin, (req, res) => {
+  app.post("/api/admin/import-csv", requireAdmin, async (req, res) => {
     try {
       const { csvContent, confirm } = req.body;
       if (!csvContent || typeof csvContent !== "string" || csvContent.trim() === "") {

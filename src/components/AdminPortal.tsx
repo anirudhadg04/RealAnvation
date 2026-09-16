@@ -4199,7 +4199,7 @@ export const AdminPortal: React.FC = () => {
             </h3>
 
             <p className="text-xs text-slate-300">
-              You are about to toggle <strong className="text-white uppercase">{emergencyModal.type}</strong> to <strong className="text-amber-400 uppercase">{emergencyModal.state ? 'ACTIVE / FROZEN' : 'RELEASED'}</strong>.
+              You are about to toggle <strong className="text-white uppercase">{emergencyModal.type}</strong> to <strong className="text-amber-400 uppercase">{emergencyModal.state ? 'ACTIVE or FROZEN' : 'RELEASED'}</strong>.
             </p>
 
             <div>
@@ -4229,10 +4229,10 @@ export const AdminPortal: React.FC = () => {
               </button>
             </div>
           </div>
-          </div>
         </div>
+      )}
 
-        {/* CSV Import Modal */}
+      {/* CSV Import Modal */}
         {csvImportModal.open && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false })}>
             <div className="bg-slate-900 border border-slate-700 w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
