@@ -1,5 +1,5 @@
-import { Pool } from "@/node_modules/@types/pg";
-import type { PoolClient } from "@/node_modules/@types/pg";
+import { Pool } from "pg";
+import type { PoolClient } from "pg";
 import type { Team } from "../types";
 
 const databaseUrl = String(
