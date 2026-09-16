@@ -3407,7 +3407,7 @@ export const AdminPortal: React.FC = () => {
                 </div>
 
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1">
-                  <span className="text-[11px] text-slate-400 font-bold uppercase">Fee Rate Per Team</span>
+                  <span className="text-[11px] text-slate-400 font-bold uppercase">Fee Rate Per Participant</span>
                   <div className="text-2xl font-black text-cyan-300 font-mono">₹{cmsConfig.registrationFee || 250}</div>
                   <p className="text-[10px] text-slate-500">UPI VPA: {cmsConfig.upiId || 'kssem.hacknove@upi'}</p>
                 </div>
