@@ -1,6 +1,28 @@
 const ExcelJS = require('exceljs');
-const wb = new ExcelJS.Workbook();
-wb.xlsx.readFile('C:\\Users\\gurur\\TF3\\RealAnvation\\sample-xlsx\\test.xlsx').then(async () => {
+const fs = require('fs');
+
+async function main() {
+  // 1. Login as admin
+  const loginRes = await fetch('http://localhost:3001/api/admin-login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ identifier: 'superadmin', password: 'AnvationAdmin@2026!' }),
+  });
+  const loginData = await loginRes.json();
+  console.log('Login:', loginData.success ? 'OK' : 'FAILED', loginData.error || '');
+
+  // Extract session cookie
+  const setCookie = loginRes.headers.get('set-cookie');
+  const cookieHeader = setCookie ? setCookie.split(';')[0] : '';
+
+  if (!loginData.success || !cookieHeader) {
+    console.error('Cannot proceed without admin session.');
+    process.exit(1);
+  }
+
+  // 2. Parse XLSX
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.readFile('C:\\Users\\gurur\\TF3\\RealAnvation\\sample-xlsx\\test.xlsx');
   const ws = wb.worksheets[0];
   const rows = [];
   ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
@@ -45,18 +67,6 @@ wb.xlsx.readFile('C:\\Users\\gurur\\TF3\\RealAnvation\\sample-xlsx\\test.xlsx').
     return -1;
   };
 
-  const findNthCol = (tokens, n) => {
-    let seen = 0;
-    for (let i = 0; i < headers.length; i++) {
-      const h = headers[i];
-      if (tokens.every(t => h.includes(t))) {
-        if (seen === n) return i;
-        seen++;
-      }
-    }
-    return -1;
-  };
-
   const fieldMap = {
     team_name: findCol(['team name']),
     domain: findCol(['select the domain']),
@@ -77,33 +87,12 @@ wb.xlsx.readFile('C:\\Users\\gurur\\TF3\\RealAnvation\\sample-xlsx\\test.xlsx').
 
   const participantBlock = (n) => {
     if (n === 4) {
-      return {
-        full_name: -1,
-        department: 52,
-        semester: 53,
-        email: 54,
-        phone: 55,
-        gender: 56,
-      };
+      return { full_name: -1, department: 52, semester: 53, email: 54, phone: 55, gender: 56 };
     }
     if (n === 3) {
-      return {
-        full_name: 44,
-        department: 45,
-        semester: 46,
-        email: 47,
-        phone: 48,
-        gender: 49,
-      };
+      return { full_name: 44, department: 45, semester: 46, email: 47, phone: 48, gender: 49 };
     }
-    return {
-      full_name: 37,
-      department: 38,
-      semester: 39,
-      email: 40,
-      phone: 41,
-      gender: 42,
-    };
+    return { full_name: 37, department: 38, semester: 39, email: 40, phone: 41, gender: 42 };
   };
 
   const p2 = participantBlock(2);
@@ -161,13 +150,42 @@ wb.xlsx.readFile('C:\\Users\\gurur\\TF3\\RealAnvation\\sample-xlsx\\test.xlsx').
     });
   }
 
-  console.log('Payload:', JSON.stringify(dataRows, null, 2));
+  console.log('Payload rows:', dataRows.length);
 
-  const res = await fetch('http://localhost:3001/api/admin/import-xlsx', {
+  // 3. Validate
+  const validateRes = await fetch('http://localhost:3001/api/admin/import-xlsx', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ rows: dataRows, confirm: true })
+    headers: {
+      'Content-Type': 'application/json',
+      'Cookie': cookieHeader,
+    },
+    body: JSON.stringify({ rows: dataRows }),
   });
-  const data = await res.json();
-  console.log('Response:', JSON.stringify(data, null, 2));
+  const validateText = await validateRes.text();
+  let validateData;
+  try { validateData = JSON.parse(validateText); } catch { validateData = { raw: validateText }; }
+  console.log('Validate status:', validateRes.status);
+  console.log('Validate response:', JSON.stringify(validateData, null, 2));
+
+  // 4. If valid, confirm import
+  if (validateData && validateData.success && validateData.valid && validateData.canImport) {
+    const importRes = await fetch('http://localhost:3001/api/admin/import-xlsx', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Cookie': cookieHeader,
+      },
+      body: JSON.stringify({ rows: dataRows, confirm: true }),
+    });
+    const importText = await importRes.text();
+    let importData;
+    try { importData = JSON.parse(importText); } catch { importData = { raw: importText }; }
+    console.log('Import status:', importRes.status);
+    console.log('Import response:', JSON.stringify(importData, null, 2));
+  }
+}
+
+main().catch(err => {
+  console.error('Test failed:', err);
+  process.exit(1);
 });

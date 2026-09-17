@@ -1429,58 +1429,57 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const currentRow = row._row;
-      const getCell = (idxs: number[]): string => {
-        for (const idx of idxs) {
-          if (idx >= 0 && idx < headers.length) {
-            let val: string;
-            if (wsRef.current) {
-              val = extractCellValue(wsRef.current.getCell(currentRow, idx + 1).value);
-            } else {
-              val = String(row[`col_${idx + 1}`] ?? '').trim();
-            }
-            if (val) return val;
+    const getCell = (idxs: number[]): string => {
+      for (const idx of idxs) {
+        if (idx >= 0 && idx < headers.length) {
+          let val: string;
+          if (wsRef.current) {
+            val = extractCellValue(wsRef.current.getCell(currentRow, idx + 1).value);
+          } else {
+            val = String(row[`col_${idx + 1}`] ?? '').trim();
           }
+          if (val) return val;
         }
-        return '';
-      };
+      }
+      return '-';
+    };
 
-      const teamName = getCell(fieldMap.team_name);
-      if (!teamName) continue; // skip blank rows
+    const teamName = getCell(fieldMap.team_name);
+    if (!teamName || teamName === '-') continue; // skip blank rows
 
-      const numTeammates = parseInt(getCell(fieldMap.num_teammates), 10);
-      const participantCount = (numTeammates >= 2 && numTeammates <= 4) ? numTeammates : 0;
+    const numTeammates = parseInt(getCell(fieldMap.num_teammates), 10);
+    const participantCount = (numTeammates >= 2 && numTeammates <= 4) ? numTeammates : 0;
 
-      dataRows.push({
-        team_name:           teamName,
-        domain:              getCell(fieldMap.domain),
-        college:             getCell(fieldMap.college),
-        city:                getCell(fieldMap.city),
-        district:            getCell(fieldMap.district),
-        state:               getCell(fieldMap.state),
-        accommodation:       getCell(fieldMap.accommodation),
-        num_teammates:       String(participantCount),
-        leader: {
-          full_name:   getCell(fieldMap.leader_full_name),
-          department:  getCell(fieldMap.leader_department),
-          semester:    getCell(fieldMap.leader_semester),
-          email:       getCell(fieldMap.leader_email),
-          phone:       getCell(fieldMap.leader_phone),
-          gender:      getCell(fieldMap.leader_gender),
-        },
-        participants: [p2, p3, p4]
-          .map((block) => ({
-            full_name:   getCell(block.full_name),
-            department:  getCell(block.department),
-            semester:    getCell(block.semester),
-            email:       getCell(block.email),
-            phone:       getCell(block.phone),
-            gender:      getCell(block.gender),
-          }))
-          .filter(p => p.full_name !== ''),
-        payment: {
-          utr:           getCell(fieldMap.utr_cols) || '-',
-        },
-      });
+    dataRows.push({
+      team_name:           teamName,
+      domain:              getCell(fieldMap.domain),
+      college:             getCell(fieldMap.college),
+      city:                getCell(fieldMap.city),
+      district:            getCell(fieldMap.district),
+      state:               getCell(fieldMap.state),
+      accommodation:       getCell(fieldMap.accommodation),
+      num_teammates:       String(participantCount),
+      leader: {
+        full_name:   getCell(fieldMap.leader_full_name),
+        department:  getCell(fieldMap.leader_department),
+        semester:    getCell(fieldMap.leader_semester),
+        email:       getCell(fieldMap.leader_email),
+        phone:       getCell(fieldMap.leader_phone),
+        gender:      getCell(fieldMap.leader_gender),
+      },
+      participants: [p2, p3, p4]
+        .map((block) => ({
+          full_name:   getCell(block.full_name),
+          department:  getCell(block.department),
+          semester:    getCell(block.semester),
+          email:       getCell(block.email),
+          phone:       getCell(block.phone),
+          gender:      getCell(block.gender),
+        })),
+      payment: {
+        utr:           getCell(fieldMap.utr_cols) || '-',
+      },
+    });
     }
 
     return {

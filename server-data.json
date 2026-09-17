@@ -784,6 +784,261 @@
       "approvalTimestamp": "",
       "approvalEmailStatus": "PENDING",
       "approvalEmailSentAt": ""
+    },
+    {
+      "id": "AN-084",
+      "teamName": "Tech Titans",
+      "leaderEmail": "arjun.sample@example.com",
+      "accessPassword": "pbkdf2_sha256$b6d12b66671350ab94e4691e3cc02679$4f9f7a114ad919100a6f89b8896e742b3567fe65d7ca726a08ad1fd22f23d6df",
+      "portalPasswordPlain": "jZeZ-dYTr-9tBK",
+      "domain": "AI & Machine Learning",
+      "preferredTrack": "AI & Machine Learning",
+      "members": [
+        {
+          "id": "p-84-1",
+          "fullName": "Arjun Sharma",
+          "college": "KSSEM",
+          "state": "Karnataka",
+          "email": "arjun.sample@example.com",
+          "phone": "9000000001",
+          "usn": "",
+          "gender": "Male",
+          "role": "Leader",
+          "teamId": "AN-084",
+          "accommodationRequired": false,
+          "checkedIn": false,
+          "foodCouponsClaimed": {
+            "lunch1": false,
+            "dinner1": false,
+            "midnightSnack": false,
+            "breakfast2": false,
+            "lunch2": false
+          }
+        },
+        {
+          "id": "p-84-2",
+          "fullName": "",
+          "college": "KSSEM",
+          "state": "Karnataka",
+          "email": "",
+          "phone": "",
+          "usn": "",
+          "gender": "",
+          "role": "Member",
+          "teamId": "AN-084",
+          "accommodationRequired": false,
+          "checkedIn": false,
+          "foodCouponsClaimed": {
+            "lunch1": false,
+            "dinner1": false,
+            "midnightSnack": false,
+            "breakfast2": false,
+            "lunch2": false
+          }
+        },
+        {
+          "id": "p-84-3",
+          "fullName": "",
+          "college": "KSSEM",
+          "state": "Karnataka",
+          "email": "",
+          "phone": "",
+          "usn": "",
+          "gender": "",
+          "role": "Member",
+          "teamId": "AN-084",
+          "accommodationRequired": false,
+          "checkedIn": false,
+          "foodCouponsClaimed": {
+            "lunch1": false,
+            "dinner1": false,
+            "midnightSnack": false,
+            "breakfast2": false,
+            "lunch2": false
+          }
+        }
+      ],
+      "status": "PENDING_PAYMENT_AUDIT",
+      "createdAt": "2026-09-17T17:20:21.712Z",
+      "projectSubmitted": false,
+      "paymentUtr": "",
+      "paymentStatus": "PENDING_PAYMENT_AUDIT",
+      "paymentAmountDetail": "Pending admin payment audit for 750 INR",
+      "credentialDeliveryStatus": "queued",
+      "approvalStatus": "PENDING",
+      "approvalTimestamp": "",
+      "approvalEmailStatus": "PENDING",
+      "approvalEmailSentAt": ""
+    },
+    {
+      "id": "AN-085",
+      "teamName": "Code Crafters",
+      "leaderEmail": "neha.sample@example.com",
+      "accessPassword": "pbkdf2_sha256$e1535dc53ce8225b92edcf237673e0a1$112a34a668d79dcb68a9c829f46d7951911ae4a4e5ad687c2a69dec4d616fb1e",
+      "portalPasswordPlain": "QrNr-VyhV-sU8N",
+      "domain": "Cybersecurity",
+      "preferredTrack": "Cybersecurity",
+      "members": [
+        {
+          "id": "p-85-1",
+          "fullName": "Neha Rao",
+          "college": "BMS College of Engineering",
+          "state": "Karnataka",
+          "email": "neha.sample@example.com",
+          "phone": "9000000011",
+          "usn": "",
+          "gender": "Female",
+          "role": "Leader",
+          "teamId": "AN-085",
+          "accommodationRequired": false,
+          "checkedIn": false,
+          "foodCouponsClaimed": {
+            "lunch1": false,
+            "dinner1": false,
+            "midnightSnack": false,
+            "breakfast2": false,
+            "lunch2": false
+          }
+        },
+        {
+          "id": "p-85-2",
+          "fullName": "",
+          "college": "BMS College of Engineering",
+          "state": "Karnataka",
+          "email": "",
+          "phone": "",
+          "usn": "",
+          "gender": "",
+          "role": "Member",
+          "teamId": "AN-085",
+          "accommodationRequired": false,
+          "checkedIn": false,
+          "foodCouponsClaimed": {
+            "lunch1": false,
+            "dinner1": false,
+            "midnightSnack": false,
+            "breakfast2": false,
+            "lunch2": false
+          }
+        }
+      ],
+      "status": "PENDING_PAYMENT_AUDIT",
+      "createdAt": "2026-09-17T17:20:21.784Z",
+      "projectSubmitted": false,
+      "paymentUtr": "",
+      "paymentStatus": "PENDING_PAYMENT_AUDIT",
+      "paymentAmountDetail": "Pending admin payment audit for 500 INR",
+      "credentialDeliveryStatus": "queued",
+      "approvalStatus": "PENDING",
+      "approvalTimestamp": "",
+      "approvalEmailStatus": "PENDING",
+      "approvalEmailSentAt": ""
+    },
+    {
+      "id": "AN-086",
+      "teamName": "Rural Innovators",
+      "leaderEmail": "vikram.sample@example.com",
+      "accessPassword": "pbkdf2_sha256$061fe00216a6ddca26f4e22d8fbb8b48$2696de1f80fddf806ecaaaa5a4f8cc1a0afaedb48e221d0fe1e06ef0cbbf71cc",
+      "portalPasswordPlain": "jE8B-j6ui-XjJf",
+      "domain": "Sustainable Technology",
+      "preferredTrack": "Sustainable Technology",
+      "members": [
+        {
+          "id": "p-86-1",
+          "fullName": "Vikram Patil",
+          "college": "Mysore Institute of Technology",
+          "state": "Karnataka",
+          "email": "vikram.sample@example.com",
+          "phone": "9000000021",
+          "usn": "",
+          "gender": "Male",
+          "role": "Leader",
+          "teamId": "AN-086",
+          "accommodationRequired": true,
+          "checkedIn": false,
+          "foodCouponsClaimed": {
+            "lunch1": false,
+            "dinner1": false,
+            "midnightSnack": false,
+            "breakfast2": false,
+            "lunch2": false
+          }
+        },
+        {
+          "id": "p-86-2",
+          "fullName": "",
+          "college": "Mysore Institute of Technology",
+          "state": "Karnataka",
+          "email": "",
+          "phone": "",
+          "usn": "",
+          "gender": "",
+          "role": "Member",
+          "teamId": "AN-086",
+          "accommodationRequired": true,
+          "checkedIn": false,
+          "foodCouponsClaimed": {
+            "lunch1": false,
+            "dinner1": false,
+            "midnightSnack": false,
+            "breakfast2": false,
+            "lunch2": false
+          }
+        },
+        {
+          "id": "p-86-3",
+          "fullName": "",
+          "college": "Mysore Institute of Technology",
+          "state": "Karnataka",
+          "email": "",
+          "phone": "",
+          "usn": "",
+          "gender": "",
+          "role": "Member",
+          "teamId": "AN-086",
+          "accommodationRequired": true,
+          "checkedIn": false,
+          "foodCouponsClaimed": {
+            "lunch1": false,
+            "dinner1": false,
+            "midnightSnack": false,
+            "breakfast2": false,
+            "lunch2": false
+          }
+        },
+        {
+          "id": "p-86-4",
+          "fullName": "",
+          "college": "Mysore Institute of Technology",
+          "state": "Karnataka",
+          "email": "345678901234",
+          "phone": "Pending",
+          "usn": "",
+          "gender": "",
+          "role": "Member",
+          "teamId": "AN-086",
+          "accommodationRequired": true,
+          "checkedIn": false,
+          "foodCouponsClaimed": {
+            "lunch1": false,
+            "dinner1": false,
+            "midnightSnack": false,
+            "breakfast2": false,
+            "lunch2": false
+          }
+        }
+      ],
+      "status": "PENDING_PAYMENT_AUDIT",
+      "createdAt": "2026-09-17T17:20:21.883Z",
+      "projectSubmitted": false,
+      "paymentUtr": "",
+      "paymentStatus": "PENDING_PAYMENT_AUDIT",
+      "paymentAmountDetail": "Pending admin payment audit for 1000 INR",
+      "credentialDeliveryStatus": "queued",
+      "approvalStatus": "PENDING",
+      "approvalTimestamp": "",
+      "approvalEmailStatus": "PENDING",
+      "approvalEmailSentAt": ""
     }
   ],
   "adminUsers": [
@@ -797,7 +1052,7 @@
       "status": "Active",
       "createdAt": "2026-08-01",
       "twoFactorEnabled": true,
-      "lastLogin": "2026-09-17T15:17:19.695Z"
+      "lastLogin": "2026-09-17T17:20:21.524Z"
     },
     {
       "id": "adm-2",
@@ -980,5 +1235,5 @@
       "ipAddress": "192.168.1.10"
     }
   ],
-  "nextTeamNumber": 83
+  "nextTeamNumber": 86
 }
