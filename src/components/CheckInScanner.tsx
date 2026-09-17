@@ -72,6 +72,17 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
     const trimmed = qrCodeString.trim();
     if (!trimmed) return;
 
+    // Validate Team ID format: AN- followed by at least 3 digits
+    const teamIdPattern = /^AN-\d{3,}$/i;
+    if (!teamIdPattern.test(trimmed)) {
+      setScanning(false);
+      setScanMessage({
+        type: 'error',
+        text: `Invalid Team ID format. Expected format like AN-001.`
+      });
+      return;
+    }
+
     setScanning(true);
     setVerifiedPayment(null);
 
@@ -91,10 +102,26 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
       const team: Team = data.team;
       setScannedTeam(team);
 
+      if (team.approvalStatus === 'REJECTED') {
+        setScanMessage({
+          type: 'error',
+          text: `Team ${team.teamName} (${team.id}) has been rejected and cannot be checked in.`
+        });
+        return;
+      }
+
+      if (team.approvalStatus === 'PENDING_PAYMENT_AUDIT' || team.approvalStatus === 'PENDING') {
+        setScanMessage({
+          type: 'error',
+          text: `Team ${team.teamName} (${team.id}) is awaiting payment audit. Gate entry denied.`
+        });
+        return;
+      }
+
       if (team.approvalStatus !== 'APPROVED') {
         setScanMessage({
           type: 'error',
-          text: `Team ${team.teamName} (${team.id}) is not approved for entry (approvalStatus: ${team.approvalStatus || 'PENDING'}). Gate entry denied.`
+          text: `Team ${team.teamName} (${team.id}) is not approved for entry (approvalStatus: ${team.approvalStatus || 'UNKNOWN'}). Gate entry denied.`
         });
         return;
       }

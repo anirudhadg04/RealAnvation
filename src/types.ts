@@ -49,6 +49,7 @@ export interface Team {
   approvalEmailSentAt?: string;
   approvalReason?: string;
   paymentAuditTimestamp?: string;
+  teamQrCode?: string;
   collegeIdImages?: Record<string, string>;
 }
 

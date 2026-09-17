@@ -1376,27 +1376,27 @@ export async function startServer(options: { listen?: boolean } = {}) {
     });
   }
 
-  async function sendApprovalEmail(team: Team): Promise<void> {
+async function sendApprovalEmail(team: Team): Promise<void> {
     const smtp = getSmtpConfig();
     if (!smtp.configured) {
-      throw new Error("SMTP is not fully configured for approval delivery.");
+        throw new Error("SMTP is not fully configured for approval delivery.");
     }
     const transporter = nodemailer.createTransport({
-      host: String(process.env.SMTP_HOST),
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: process.env.SMTP_SECURE === "true",
-      requireTLS: true,
-      auth: { user: String(process.env.SMTP_USER), pass: String(process.env.SMTP_PASS) }
+        host: String(process.env.SMTP_HOST),
+        port: Number(process.env.SMTP_PORT) || 587,
+        secure: process.env.SMTP_SECURE === "true",
+        requireTLS: true,
+        auth: { user: String(process.env.SMTP_USER), pass: String(process.env.SMTP_PASS) }
     });
     const from = String(process.env.MAIL_FROM || process.env.SMTP_USER);
     const recipients = team.members.map((m) => m.email);
     const password = String(team.portalPasswordPlain || team.accessPassword || '');
     const subject = `ANVATION 2026 Registration Approved — Team ${team.id}`;
-    const text = `Hello participants,\n\nYour team ${team.teamName} (${team.id}) has been approved by the admin.\n\nPayment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.\n\nPortal password: ${password}\n\nUse Team ID ${team.id} and this password to log in to the participant portal.\n\nTeam details:\n${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}`;
-    const html = `<p>Hello participants,</p><p>Your team <b>${team.teamName}</b> (<b>${team.id}</b>) has been approved by the admin.</p><p><b>Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.</b></p><p><b>Portal password:</b> ${password}</p><p>Use Team ID <b>${team.id}</b> and this password to log in to the participant portal.</p><p>${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}</p>`;
+    const text = `Hello participants,\n\nYour team ${team.teamName} (${team.id}) has been approved by the admin.\n\nPayment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.\n\nPortal password: ${password}\n\nUse Team ID ${team.id} and this password to log in to the participant portal.\n\nTeam details:\n${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}\n\nQR code for check-in is available in the HTML version of this email.`;
+    const html = `<p>Hello participants,</p><p>Your team <b>${team.teamName}</b> (<b>${team.id}</b>) has been approved by the admin.</p><p><b>Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.</b></p><p><b>Portal password:</b> ${password}</p><p>Use Team ID <b>${team.id}</b> and this password to log in to the participant portal.</p><p>${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}</p>${team.teamQrCode ? `<p>Scan the QR code below to check in:</p><img src="${team.teamQrCode}" alt="QR code for team ${team.id}" style="max-width:200px;">` : ''}`;
     await transporter.verify();
     await Promise.all(recipients.map((recipient) => transporter.sendMail({ from, to: recipient, subject, text, html })));
-  }
+}
 
   // API Routes
   app.get("/api/health", (req, res) => {
@@ -3468,15 +3468,18 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
   app.post("/api/admin/teams/:teamId/approve", requireAdmin, async (req, res) => {
     try {
       const { teamId } = req.params;
-      const team = teams.find((candidate) => candidate.id.toLowerCase() === teamId.toLowerCase());
-      if (!team) return res.status(404).json({ success: false, error: "Team not found" });
-      if (team.approvalStatus === 'APPROVED') {
-        return res.json({ success: true, team, alreadyApproved: true, message: 'Team already approved.' });
+      const teamIndex = teams.findIndex((candidate) => candidate.id.toLowerCase() === teamId.toLowerCase());
+      if (teamIndex === -1) return res.status(404).json({ success: false, error: "Team not found" });
+      const originalTeam = teams[teamIndex];
+      if (originalTeam.approvalStatus === 'APPROVED') {
+        return res.json({ success: true, team: originalTeam, alreadyApproved: true, message: 'Team already approved.' });
       }
-      if (team.approvalStatus === 'REJECTED') {
+      if (originalTeam.approvalStatus === 'REJECTED') {
         return res.status(409).json({ success: false, error: 'This team has already been rejected and cannot be approved.' });
       }
 
+      // Create a copy of the team to apply changes
+      const team = { ...originalTeam };
       const previousApprovalStatus = team.approvalStatus || 'PENDING';
       team.approvalStatus = 'APPROVED';
       team.approvalTimestamp = new Date().toISOString();
@@ -3485,9 +3488,25 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       team.paymentAmountDetail = `Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.`;
       team.approvalEmailStatus = 'PENDING';
 
+      // Generate password and QR code for approval
+      const plainPassword = generatePortalPassword();
+      team.accessPassword = hashPassword(plainPassword);
+      team.portalPasswordPlain = plainPassword;
+      const qrCodeDataUrl = await QRCode.toDataURL(team.id, { width: 200 });
+      team.teamQrCode = qrCodeDataUrl;
+
+      // Persist changes
       if (productionStoreEnabled) {
-        try { await updateProductionTeam(team); } catch (storageErr) { console.error('[DATABASE] Production approval update failed:', storageErr); }
+        try {
+          await updateProductionTeam(team);
+        } catch (storageErr) {
+          console.error('[DATABASE] Production approval update failed:', storageErr);
+          return res.status(500).json({ success: false, error: 'Failed to save approval to database.' });
+        }
       }
+
+      // Update in-memory team
+      teams[teamIndex] = team;
       markDirty();
 
       try {
@@ -3522,15 +3541,18 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     try {
       const { teamId } = req.params;
       const { reason } = req.body;
-      const team = teams.find((candidate) => candidate.id.toLowerCase() === teamId.toLowerCase());
-      if (!team) return res.status(404).json({ success: false, error: "Team not found" });
-      if (team.approvalStatus === 'REJECTED') {
-        return res.json({ success: true, team, alreadyRejected: true, message: 'Team already rejected.' });
+      const teamIndex = teams.findIndex((candidate) => candidate.id.toLowerCase() === teamId.toLowerCase());
+      if (teamIndex === -1) return res.status(404).json({ success: false, error: "Team not found" });
+      const originalTeam = teams[teamIndex];
+      if (originalTeam.approvalStatus === 'REJECTED') {
+        return res.json({ success: true, team: originalTeam, alreadyRejected: true, message: 'Team already rejected.' });
       }
-      if (team.approvalStatus === 'APPROVED') {
+      if (originalTeam.approvalStatus === 'APPROVED') {
         return res.status(409).json({ success: false, error: 'This team has already been approved and cannot be rejected.' });
       }
 
+      // Create a copy of the team to apply changes
+      const team = { ...originalTeam };
       const previousApprovalStatus = team.approvalStatus || 'PENDING';
       team.approvalStatus = 'REJECTED';
       team.approvalTimestamp = new Date().toISOString();
@@ -3540,9 +3562,18 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       team.paymentAmountDetail = `Rejected by admin payment audit; ${team.approvalReason}`;
       team.approvalEmailStatus = 'PENDING';
 
+      // Persist changes
       if (productionStoreEnabled) {
-        try { await updateProductionTeam(team); } catch (storageErr) { console.error('[DATABASE] Production rejection update failed:', storageErr); }
+        try {
+          await updateProductionTeam(team);
+        } catch (storageErr) {
+          console.error('[DATABASE] Production rejection update failed:', storageErr);
+          return res.status(500).json({ success: false, error: 'Failed to save rejection to database.' });
+        }
       }
+
+      // Update in-memory team
+      teams[teamIndex] = team;
       markDirty();
 
       auditLogs.unshift({
@@ -3570,32 +3601,35 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     if (!team) return res.status(404).json({ success: false, error: "Team not found" });
 
     if (paymentStatus === 'Rejected') {
-      const teamToRemove = { ...team };
-      const oldSessions = new Map<string, any>();
+      const teamIndex = teams.findIndex((candidate) => candidate.id.toLowerCase() === team.id.toLowerCase() || (candidate.regNumber || '').toLowerCase() === team.id.toLowerCase());
+      const previousApprovalStatus = team.approvalStatus || 'PENDING';
+      team.approvalStatus = 'REJECTED';
+      team.approvalTimestamp = new Date().toISOString();
+      team.status = 'Rejected' as any;
+      team.paymentStatus = 'Rejected' as any;
+      team.paymentAmountDetail = `Rejected by admin payment audit`;
+      team.approvalEmailStatus = 'PENDING';
+      team.approvalReason = 'Payment UTR rejected by finance admin';
 
-      for (const [sid, session] of sessionStore.entries()) {
-        if (session.user.type === 'participant' && session.user.teamId === team.id) {
-          oldSessions.set(sid, session);
-          sessionStore.delete(sid);
-        }
-      }
-
+      // Persist changes to production store
       if (productionStoreEnabled) {
         try {
-          await deleteProductionTeam(team.id);
+          await updateProductionTeam(team);
         } catch (storageErr) {
-          console.error('[DATABASE] Production team deletion for rejected payment failed:', storageErr);
+          console.error('[DATABASE] Production rejection update failed:', storageErr);
         }
       }
 
-      teams = teams.filter((candidate) => candidate.id.toLowerCase() !== team.id.toLowerCase() && (candidate.regNumber || '').toLowerCase() !== team.id.toLowerCase());
+      // Update in-memory team
+      teams[teamIndex] = team;
       rebuildUniquenessIndexes();
       markDirty();
 
+      // Update CSV backup to reflect rejected state
       try {
         fs.writeFileSync(PARTICIPANT_BACKUP_FILE, participantBackupFileContents(teams), { encoding: 'utf8', mode: 0o600 });
       } catch (backupErr) {
-        console.error('[BACKUP] Failed to rewrite participant registration CSV after payment rejection:', backupErr);
+        console.error('[BACKUP] Failed to update participant registration CSV after rejection:', backupErr);
       }
 
       auditLogs.unshift({
@@ -3603,15 +3637,15 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         timestamp: new Date().toISOString(),
         actorEmail: req.session?.email || req.session?.username || 'unknown-admin',
         actorRole: (req.session?.role || 'ADMIN') as AdminRole,
-        action: 'Payment Status Change: Rejected + credentials removed',
+        action: 'Team Reject',
         target: `Team ${team.teamName} (${team.id})`,
-        beforeValue: team.paymentStatus || 'Pending',
-        afterValue: 'Rejected + Removed',
-        reason: 'Payment UTR rejected by finance admin. Team and participants removed from active directories.',
+        beforeValue: previousApprovalStatus,
+        afterValue: 'REJECTED',
+        reason: 'Payment UTR rejected by finance admin. Team and participants preserved with REJECTED status.',
         ipAddress: getClientIp(req)
       });
 
-      return res.json({ success: true, removed: true, team: teamToRemove, message: 'Rejected payment team removed from active registration, team control and participant directory.' });
+      return res.json({ success: true, team, rejected: true, message: 'Team rejected successfully.' });
     }
 
     if (paymentStatus === 'Verified') {
@@ -3658,7 +3692,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     res.json({ success: true, team });
   });
 
-  // CSV / XLSX Import Endpoint
+  // CSV Import Endpoint
   app.post("/api/admin/import-csv", requireAdmin, async (req, res) => {
     try {
       const body = req.body || {};
@@ -3666,13 +3700,10 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
 
       let headers: string[];
       let dataRows: string[][];
-      let rowImages: Record<string, string>[] = [];
 
       if (Array.isArray(body.rows) && body.fieldMap) {
-        // XLSX payload (rows + fieldMap + per-row embedded images)
         headers = body.headers || [];
         dataRows = body.rows;
-        rowImages = body.images || [];
       } else {
         const csvContent = body.csvContent;
         if (!csvContent || typeof csvContent !== "string" || csvContent.trim() === "") {
@@ -3687,49 +3718,27 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       }
 
       if (dataRows.length === 0) {
-        return res.status(400).json({ success: false, error: "No data rows found in the workbook." });
+        return res.status(400).json({ success: false, error: "No data rows found in the CSV." });
       }
 
       const requiredColumns: Record<string, string[]> = {
-        team_name: ["team name"],
-        domain: ["select the domain"],
+        registration_timestamp: ["registration_timestamp"],
+        team_id: ["team_id"],
+        team_name: ["team_name"],
+        domain: ["domain"],
+        participant_name: ["participant_name"],
+        role: ["role"],
+        email: ["email"],
+        phone: ["phone"],
+        usn: ["usn"],
         college: ["college"],
-        city: ["city"],
-        district: ["district"],
-        state: ["states"],
-        accommodation: ["accommodation"],
-        leader_full_name: ["team leader full name"],
-        leader_department: ["team leader department"],
-        leader_semester: ["team leader semester"],
-        leader_email: ["team leader email id"],
-        leader_phone: ["team leader whatsapp number"],
-        leader_gender: ["team leader gender"],
-        leader_college_id: ["team leader college id card"],
-        num_teammates: ["number of teammates"],
-        p2_full_name: ["participant 2 full name"],
-        p2_department: ["participant 2 department"],
-        p2_semester: ["participant 2 semester"],
-        p2_email: ["participant 2 email id"],
-        p2_phone: ["participant 2 phone number"],
-        p2_gender: ["participant 2 gender"],
-        p2_college_id: ["participant 2 college id card"],
-        p3_full_name: ["participant 3 full name"],
-        p3_department: ["participant 3 department"],
-        p3_semester: ["participant 3 semester"],
-        p3_email: ["participant 3 email id"],
-        p3_phone: ["participant 3 phone number"],
-        p3_gender: ["participant 3 gender"],
-        p3_college_id: ["participant 3 college id card"],
-        p4_full_name: ["participant 4 full name"],
-        p4_department: ["participant 4 department"],
-        p4_semester: ["participant 4 semester"],
-        p4_email: ["participant 4 email id"],
-        p4_phone: ["participant 4 phone number"],
-        p4_gender: ["participant 4 gender"],
-        p4_college_id: ["participant 4 college id card"],
-        utr: ["transaction id / utr number"],
-        payment_screenshot: ["payment slip"],
-        payment_confirmation: ["payment confirmation"]
+        state: ["state"],
+        gender: ["gender"],
+        accommodation_required: ["accommodation_required"],
+        payment_utr: ["payment_utr"],
+        payment_status: ["payment_status"],
+        payment_amount_detail: ["payment_amount_detail"],
+        team_status: ["team_status"]
       };
 
       const fieldMap: Record<string, number> = body.fieldMap || {};
@@ -3773,65 +3782,26 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         const errors: string[] = [];
         const rowIndex = i + 1;
 
+        const registrationTimestamp = (row[fieldMap["registration_timestamp"]] || "").trim();
+        const teamId = (row[fieldMap["team_id"]] || "").trim();
         const teamName = (row[fieldMap["team_name"]] || "").trim();
         const domain = (row[fieldMap["domain"]] || "").trim();
+        const participantName = (row[fieldMap["participant_name"]] || "").trim();
+        const role = (row[fieldMap["role"]] || "").trim();
+        const email = (row[fieldMap["email"]] || "").trim();
+        const phone = (row[fieldMap["phone"]] || "").trim();
+        const usn = (row[fieldMap["usn"]] || "").trim();
         const college = (row[fieldMap["college"]] || "").trim();
-        const city = (row[fieldMap["city"]] || "").trim();
-        const district = (row[fieldMap["district"]] || "").trim();
         const state = (row[fieldMap["state"]] || "").trim();
-        const accommodation = (row[fieldMap["accommodation"]] || "").trim();
-        const leaderFullName = (row[fieldMap["leader_full_name"]] || "").trim();
-        const leaderDepartment = (row[fieldMap["leader_department"]] || "").trim();
-        const leaderSemester = (row[fieldMap["leader_semester"]] || "").trim();
-        const leaderEmail = (row[fieldMap["leader_email"]] || "").trim();
-        const leaderPhone = (row[fieldMap["leader_phone"]] || "").trim();
-        const leaderGender = (row[fieldMap["leader_gender"]] || "").trim();
-        const leaderCollegeId = (row[fieldMap["leader_college_id"]] || "").trim();
-        const numTeammatesStr = (row[fieldMap["num_teammates"]] || "").trim();
-        const p2FullName = (row[fieldMap["p2_full_name"]] || "").trim();
-        const p2Department = (row[fieldMap["p2_department"]] || "").trim();
-        const p2Semester = (row[fieldMap["p2_semester"]] || "").trim();
-        const p2Email = (row[fieldMap["p2_email"]] || "").trim();
-        const p2Phone = (row[fieldMap["p2_phone"]] || "").trim();
-        const p2Gender = (row[fieldMap["p2_gender"]] || "").trim();
-        const p2CollegeId = (row[fieldMap["p2_college_id"]] || "").trim();
-        const p3FullName = (row[fieldMap["p3_full_name"]] || "").trim();
-        const p3Department = (row[fieldMap["p3_department"]] || "").trim();
-        const p3Semester = (row[fieldMap["p3_semester"]] || "").trim();
-        const p3Email = (row[fieldMap["p3_email"]] || "").trim();
-        const p3Phone = (row[fieldMap["p3_phone"]] || "").trim();
-        const p3Gender = (row[fieldMap["p3_gender"]] || "").trim();
-        const p3CollegeId = (row[fieldMap["p3_college_id"]] || "").trim();
-        const p4FullName = (row[fieldMap["p4_full_name"]] || "").trim();
-        const p4Department = (row[fieldMap["p4_department"]] || "").trim();
-        const p4Semester = (row[fieldMap["p4_semester"]] || "").trim();
-        const p4Email = (row[fieldMap["p4_email"]] || "").trim();
-        const p4Phone = (row[fieldMap["p4_phone"]] || "").trim();
-        const p4Gender = (row[fieldMap["p4_gender"]] || "").trim();
-        const p4CollegeId = (row[fieldMap["p4_college_id"]] || "").trim();
-        const utr = (row[fieldMap["utr"]] || "").trim();
-        const cellPaymentSlip = (row[fieldMap["payment_screenshot"]] || "").trim();
-        const paymentConfirmation = (row[fieldMap["payment_confirmation"]] || "").trim();
+        const gender = (row[fieldMap["gender"]] || "").trim();
+        const accommodationRequired = (row[fieldMap["accommodation_required"]] || "").trim();
+        const paymentUtr = (row[fieldMap["payment_utr"]] || "").trim();
+        const paymentStatus = (row[fieldMap["payment_status"]] || "").trim();
+        const paymentAmountDetail = (row[fieldMap["payment_amount_detail"]] || "").trim();
+        const teamStatus = (row[fieldMap["team_status"]] || "").trim();
 
-        const rowImgs = rowImages[i] || {};
-        const resolveProof = (colIdx: number): string => {
-          const img = rowImgs[`col_${colIdx + 1}`];
-          if (img) return img;
-          const cellVal = String(row[colIdx] || '').trim();
-          if (/^https?:\/\//i.test(cellVal)) return cellVal;
-          return '';
-        };
-
-        const paymentSlip = resolveProof(fieldMap["payment_screenshot"]) || cellPaymentSlip;
-        const leaderCollegeIdImg = resolveProof(fieldMap["leader_college_id"]);
-        const p2CollegeIdImg = resolveProof(fieldMap["p2_college_id"]);
-        const p3CollegeIdImg = resolveProof(fieldMap["p3_college_id"]);
-        const p4CollegeIdImg = resolveProof(fieldMap["p4_college_id"]);
-
-        const numTeammates = parseInt(numTeammatesStr, 10);
-        const cleanLeaderPhone = leaderPhone.replace(/[^0-9]/g, "");
-        const cleanLeaderCollegeId = leaderCollegeId.trim().toUpperCase();
-        const cleanUtr = utr.toUpperCase();
+        const cleanPhone = phone.replace(/[^0-9]/g, "");
+        const cleanUtr = paymentUtr.toUpperCase();
 
         if (!teamName || teamName.length < 2 || teamName.length > 50) {
           errors.push("Team name must be between 2 and 50 characters.");
@@ -3839,61 +3809,21 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         if (!domain || !validRegistrationDomains.has(domain)) {
           errors.push(`Invalid domain "${domain}". Must be one of: ${Array.from(validRegistrationDomains).join(", ")}`);
         }
-        if (!leaderFullName) errors.push("Team leader full name is required.");
-        if (!leaderEmail || !/^[^\s@]+@gmail\.com$/i.test(leaderEmail)) {
-          errors.push("Leader email must be a valid @gmail.com address.");
+        if (!participantName) errors.push("Participant name is required.");
+        if (!email || !/^[^\s@]+@gmail\.com$/i.test(email)) {
+          errors.push("Email must be a valid @gmail.com address.");
         }
-        if (cleanLeaderPhone.length !== 10 || !/^\d{10}$/.test(cleanLeaderPhone)) {
-          errors.push("Leader phone number must contain exactly 10 digits.");
+        if (cleanPhone.length !== 10 || !/^\d{10}$/.test(cleanPhone)) {
+          errors.push("Phone number must contain exactly 10 digits.");
         }
-        if (!leaderGender) {
-          errors.push("Team leader gender is required.");
-        }
-        if (!leaderCollegeId) {
-          errors.push("Team leader college ID card is required.");
-        }
-        if (!state) {
-          errors.push("State is required.");
-        }
-        if (numTeammates !== 2 && numTeammates !== 3) {
-          errors.push("Number of teammates must be 2 or 3.");
-        }
-
-        const participantDefs = [
-          { name: p2FullName, email: p2Email, phone: p2Phone, gender: p2Gender, collegeId: p2CollegeId, idx: 2 },
-          { name: p3FullName, email: p3Email, phone: p3Phone, gender: p3Gender, collegeId: p3CollegeId, idx: 3 },
-          { name: p4FullName, email: p4Email, phone: p4Phone, gender: p4Gender, collegeId: p4CollegeId, idx: 4 },
-        ];
-
-        for (let j = 0; j < numTeammates; j++) {
-          const p = participantDefs[j];
-          if (!p.name) errors.push(`Participant ${p.idx} full name is required.`);
-          if (!p.email || !/^[^\s@]+@gmail\.com$/i.test(p.email)) {
-            errors.push(`Participant ${p.idx} email must be a valid @gmail.com address.`);
-          }
-          const cleanPhone = p.phone.replace(/[^0-9]/g, "");
-          if (cleanPhone.length !== 10 || !/^\d{10}$/.test(cleanPhone)) {
-            errors.push(`Participant ${p.idx} phone number must contain exactly 10 digits.`);
-          }
-          if (!p.gender) {
-            errors.push(`Participant ${p.idx} gender is required.`);
-          }
-          if (!p.collegeId) {
-            errors.push(`Participant ${p.idx} college ID card is required.`);
-          }
-        }
-
-        if (numTeammates === 2 && (p4FullName || p4Email || p4Phone)) {
-          errors.push("Participant 4 fields should be empty for 2-teammate teams.");
-        }
-
-        if (!utr || !/^\d{12}$/.test(cleanUtr)) {
-          errors.push("UTR must be exactly 12 digits.");
-        }
+        if (!gender) errors.push("Gender is required.");
         if (!college) errors.push("College is required.");
         if (!state) errors.push("State is required.");
+        if (!paymentUtr || !/^\d{12}$/.test(cleanUtr)) {
+          errors.push("UTR must be exactly 12 digits.");
+        }
 
-        const accLower = accommodation.toLowerCase();
+        const accLower = accommodationRequired.toLowerCase();
         if (accLower !== "" && accLower !== "yes" && accLower !== "no" && accLower !== "true" && accLower !== "false") {
           errors.push("Accommodation must be Yes/No.");
         }
@@ -3902,46 +3832,51 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         if (teamName && csvTeamNames.has(normTeamName)) {
           errors.push(`Duplicate team name "${teamName}" within CSV.`);
         }
-        if (leaderEmail && csvEmails.has(leaderEmail.toLowerCase())) {
-          errors.push(`Duplicate email "${leaderEmail}" within CSV.`);
+        if (email && csvEmails.has(email.toLowerCase())) {
+          errors.push(`Duplicate email "${email}" within CSV.`);
         }
-        if (cleanLeaderPhone && csvPhones.has(cleanLeaderPhone)) {
-          errors.push(`Duplicate phone "${cleanLeaderPhone}" within CSV.`);
-        }
-        if (cleanLeaderCollegeId && csvUsns.has(cleanLeaderCollegeId)) {
-          errors.push(`Duplicate college ID "${cleanLeaderCollegeId}" within CSV.`);
+        if (cleanPhone && csvPhones.has(cleanPhone)) {
+          errors.push(`Duplicate phone "${cleanPhone}" within CSV.`);
         }
         if (cleanUtr && csvUtrs.has(cleanUtr)) {
           errors.push(`Duplicate UTR "${cleanUtr}" within CSV.`);
         }
 
         csvTeamNames.add(normTeamName);
-        if (leaderEmail) csvEmails.add(leaderEmail.toLowerCase());
-        if (cleanLeaderPhone) csvPhones.add(cleanLeaderPhone);
-        if (cleanLeaderCollegeId) csvUsns.add(cleanLeaderCollegeId);
+        if (email) csvEmails.add(email.toLowerCase());
+        if (cleanPhone) csvPhones.add(cleanPhone);
         if (cleanUtr) csvUtrs.add(cleanUtr);
 
-        const amount = numTeammates === 2 ? "₹750" : "₹1000";
-        const paymentDetail = `Pending admin payment audit for ${cmsConfig.registrationFee || 250} INR`;
+        const amount = `₹${cmsConfig.registrationFee || 250}`;
+        const paymentDetail = paymentAmountDetail || `Pending admin payment audit for ${cmsConfig.registrationFee || 250} INR`;
 
         preview.push({
           rowIndex,
           teamName: teamName || "(empty)",
-          leaderEmail: leaderEmail || "(empty)",
+          leaderEmail: email || "(empty)",
           amount,
           utr: cleanUtr || "(empty)",
           paymentDetail,
           status: errors.length > 0 ? 'Invalid' : 'Valid',
           errors,
           rowData: {
-            teamName, domain, college, city, district, state, accommodation,
-            leaderFullName, leaderDepartment, leaderSemester, leaderEmail, leaderPhone, leaderGender, leaderCollegeId,
-            numTeammates,
-            p2FullName, p2Department, p2Semester, p2Email, p2Phone, p2Gender, p2CollegeId,
-            p3FullName, p3Department, p3Semester, p3Email, p3Phone, p3Gender, p3CollegeId,
-            p4FullName, p4Department, p4Semester, p4Email, p4Phone, p4Gender, p4CollegeId,
-            utr: cleanUtr, paymentSlip, paymentConfirmation,
-            leaderCollegeIdImg, p2CollegeIdImg, p3CollegeIdImg, p4CollegeIdImg
+            registrationTimestamp,
+            teamId,
+            teamName,
+            domain,
+            participantName,
+            role,
+            email,
+            phone,
+            usn,
+            college,
+            state,
+            gender,
+            accommodationRequired,
+            paymentUtr: cleanUtr,
+            paymentStatus,
+            paymentAmountDetail: paymentDetail,
+            teamStatus
           }
         });
       }
@@ -3953,46 +3888,22 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           p.errors.push(`Team name "${rd.teamName}" already exists in database.`);
           p.status = 'Invalid';
         }
-        if (registeredEmails.has(rd.leaderEmail.toLowerCase())) {
-          p.errors.push(`Leader email "${rd.leaderEmail}" already exists in database.`);
+        if (registeredEmails.has(rd.email.toLowerCase())) {
+          p.errors.push(`Email "${rd.email}" already exists in database.`);
           p.status = 'Invalid';
         }
-        const cleanLeaderPhone = rd.leaderPhone.replace(/[^0-9]/g, "");
-        if (cleanLeaderPhone && registeredPhones.has(cleanLeaderPhone)) {
-          p.errors.push(`Leader phone "${cleanLeaderPhone}" already exists in database.`);
+        const cleanPhone = rd.phone.replace(/[^0-9]/g, "");
+        if (cleanPhone && registeredPhones.has(cleanPhone)) {
+          p.errors.push(`Phone "${cleanPhone}" already exists in database.`);
           p.status = 'Invalid';
         }
-        const cleanLeaderCollegeId = rd.leaderCollegeId.trim().toUpperCase();
-        if (cleanLeaderCollegeId && registeredUsns.has(cleanLeaderCollegeId)) {
-          p.errors.push(`Leader college ID "${cleanLeaderCollegeId}" already exists in database.`);
+        if (rd.usn && registeredUsns.has(rd.usn.trim().toUpperCase())) {
+          p.errors.push(`USN "${rd.usn}" already exists in database.`);
           p.status = 'Invalid';
         }
-        if (rd.utr && registeredUtrs.has(rd.utr)) {
-          p.errors.push(`UTR "${rd.utr}" already exists in database.`);
+        if (rd.paymentUtr && registeredUtrs.has(rd.paymentUtr)) {
+          p.errors.push(`UTR "${rd.paymentUtr}" already exists in database.`);
           p.status = 'Invalid';
-        }
-        // Check participant emails, phones, and college IDs against database
-        const participantDefs = [
-          { email: rd.p2Email, phone: rd.p2Phone, collegeId: rd.p2CollegeId, idx: 2 },
-          { email: rd.p3Email, phone: rd.p3Phone, collegeId: rd.p3CollegeId, idx: 3 },
-          { email: rd.p4Email, phone: rd.p4Phone, collegeId: rd.p4CollegeId, idx: 4 },
-        ];
-        for (let j = 0; j < rd.numTeammates; j++) {
-          const pdef = participantDefs[j];
-          if (pdef.email && registeredEmails.has(pdef.email.toLowerCase())) {
-            p.errors.push(`Participant ${pdef.idx} email "${pdef.email}" already exists in database.`);
-            p.status = 'Invalid';
-          }
-          const cleanPhone = pdef.phone.replace(/[^0-9]/g, "");
-          if (cleanPhone && registeredPhones.has(cleanPhone)) {
-            p.errors.push(`Participant ${pdef.idx} phone "${cleanPhone}" already exists in database.`);
-            p.status = 'Invalid';
-          }
-          const cleanCollegeId = pdef.collegeId.trim().toUpperCase();
-          if (cleanCollegeId && registeredUsns.has(cleanCollegeId)) {
-            p.errors.push(`Participant ${pdef.idx} college ID "${cleanCollegeId}" already exists in database.`);
-            p.status = 'Invalid';
-          }
         }
       }
 
@@ -4021,74 +3932,43 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       for (let i = 0; i < dataRows.length; i++) {
         const rd = preview[i].rowData!;
         const teamIndex = ++nextTeamNumber;
-        const teamId = `AN-${String(teamIndex).padStart(3, '0')}`;
+        const teamId = rd.teamId || `AN-${String(teamIndex).padStart(3, '0')}`;
 
         const leaderParticipant: Participant = {
           id: `p-${teamIndex}-1`,
-          fullName: sanitizeInputString(rd.leaderFullName),
+          fullName: sanitizeInputString(rd.participantName),
           college: sanitizeInputString(rd.college),
           state: sanitizeInputString(rd.state),
-          email: rd.leaderEmail,
-          phone: sanitizeInputString(rd.leaderPhone),
-          usn: sanitizeInputString(rd.leaderCollegeId.trim().toUpperCase()),
-          gender: sanitizeInputString(rd.leaderGender),
-          role: 'Leader',
+          email: rd.email,
+          phone: sanitizeInputString(rd.phone),
+          usn: sanitizeInputString(rd.usn.trim().toUpperCase()),
+          gender: sanitizeInputString(rd.gender),
+          role: (rd.role as 'Leader' | 'Member') || 'Leader',
           teamId,
-          accommodationRequired: rd.accommodation.toLowerCase() === 'yes' || rd.accommodation.toLowerCase() === 'true',
+          accommodationRequired: rd.accommodationRequired.toLowerCase() === 'yes' || rd.accommodationRequired.toLowerCase() === 'true',
           checkedIn: false,
           foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
         };
 
-        const members: Participant[] = [];
-        const participantDefs = [
-          { name: rd.p2FullName, email: rd.p2Email, phone: rd.p2Phone, gender: rd.p2Gender, collegeId: rd.p2CollegeId },
-          { name: rd.p3FullName, email: rd.p3Email, phone: rd.p3Phone, gender: rd.p3Gender, collegeId: rd.p3CollegeId },
-          { name: rd.p4FullName, email: rd.p4Email, phone: rd.p4Phone, gender: rd.p4Gender, collegeId: rd.p4CollegeId },
-        ];
-
-        for (let j = 0; j < rd.numTeammates; j++) {
-          const p = participantDefs[j];
-          members.push({
-            id: `p-${teamIndex}-${j + 2}`,
-            fullName: sanitizeInputString(p.name),
-            college: sanitizeInputString(rd.college),
-            state: sanitizeInputString(rd.state),
-            email: p.email,
-            phone: sanitizeInputString(p.phone),
-            usn: sanitizeInputString(p.collegeId.trim().toUpperCase()),
-            gender: sanitizeInputString(p.gender),
-            role: 'Member',
-            teamId,
-            accommodationRequired: rd.accommodation.toLowerCase() === 'yes' || rd.accommodation.toLowerCase() === 'true',
-            checkedIn: false,
-            foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
-          });
-        }
+        const members: Participant[] = [leaderParticipant];
 
         const accessPassword = generatePortalPassword();
 
         const newTeam: Team = {
           id: teamId,
           teamName: sanitizeInputString(rd.teamName),
-          leaderEmail: rd.leaderEmail,
+          leaderEmail: rd.email,
           accessPassword: hashPassword(accessPassword),
           portalPasswordPlain: accessPassword,
           domain: sanitizeInputString(rd.domain),
           preferredTrack: sanitizeInputString(rd.domain),
-          members: [leaderParticipant, ...members],
-          status: 'PENDING_PAYMENT_AUDIT' as any,
-          createdAt: new Date().toISOString(),
+          members,
+          status: (rd.teamStatus as any) || 'PENDING_PAYMENT_AUDIT',
+          createdAt: rd.registrationTimestamp || new Date().toISOString(),
           projectSubmitted: false,
-          paymentUtr: rd.utr,
-          paymentStatus: 'PENDING_PAYMENT_AUDIT' as any,
-          paymentAmountDetail: `Pending admin payment audit for ${cmsConfig.registrationFee || 250} INR`,
-          paymentScreenshot: rd.paymentSlip || null,
-          collegeIdImages: {
-            leader: rd.leaderCollegeIdImg || null,
-            p2: rd.p2CollegeIdImg || null,
-            p3: rd.p3CollegeIdImg || null,
-            p4: rd.p4CollegeIdImg || null
-          },
+          paymentUtr: rd.paymentUtr,
+          paymentStatus: (rd.paymentStatus as any) || 'PENDING_PAYMENT_AUDIT',
+          paymentAmountDetail: rd.paymentAmountDetail || `Pending admin payment audit for ${cmsConfig.registrationFee || 250} INR`,
           credentialDeliveryStatus: 'queued',
           approvalStatus: 'PENDING',
           approvalTimestamp: '',

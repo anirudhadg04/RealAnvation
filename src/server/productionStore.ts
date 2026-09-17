@@ -92,6 +92,68 @@ sql.transaction = async (queries: PgQuery[]): Promise<void> => {
   }
 };
 
+const TEAM_ID_SEQUENCE_NAME = "anvation_team_id_seq";
+const TEAM_ID_SEQUENCE_LOCK = 1610198601;
+
+function highestCanonicalTeamNumber(rows: Array<{ team_id?: string }>): number {
+  let highest = 0;
+  for (const row of rows) {
+    const match = String(row.team_id || "").match(/^AN-(\d+)$/i);
+    if (match) highest = Math.max(highest, Number(match[1]));
+  }
+  return highest;
+}
+
+async function initializeTeamIdSequence(): Promise<void> {
+  if (!pool) return;
+
+  await pool.query("SELECT pg_advisory_lock($1)", [TEAM_ID_SEQUENCE_LOCK]);
+  try {
+    await pool.query(
+      `CREATE SEQUENCE IF NOT EXISTS ${TEAM_ID_SEQUENCE_NAME} AS INTEGER START WITH 1`
+    );
+
+    const existingResult = await pool.query("SELECT team_id FROM registrations");
+    const highest = highestCanonicalTeamNumber(existingResult.rows);
+    const sequenceResult = await pool.query(
+      `SELECT last_value, is_called FROM ${TEAM_ID_SEQUENCE_NAME}`
+    );
+    const sequenceRow = sequenceResult.rows[0] || { last_value: 1, is_called: false };
+    const lastValue = Number(sequenceRow.last_value || 1);
+    const isCalled = Boolean(sequenceRow.is_called);
+    const target = Math.max(highest, isCalled ? lastValue : 0);
+
+    if (!isCalled || target > lastValue) {
+      await pool.query(
+        `SELECT setval($1::regclass, $2, $3)`,
+        [TEAM_ID_SEQUENCE_NAME, Math.max(target, 1), target > 0]
+      );
+    }
+  } finally {
+    try {
+      await pool.query("SELECT pg_advisory_unlock($1)", [TEAM_ID_SEQUENCE_LOCK]);
+    } catch (unlockError) {
+      console.error("[DATABASE] Failed to release Team ID sequence lock:", unlockError);
+    }
+  }
+}
+
+export async function nextProductionTeamId(): Promise<string> {
+  if (!sql || !pool) {
+    throw new Error('DATABASE_URL is required for production registration storage.');
+  }
+
+  await ensureProductionSchema();
+  const result = await pool.query(
+    `SELECT nextval('${TEAM_ID_SEQUENCE_NAME}') AS team_number`
+  );
+  const teamNumber = Number(result.rows[0]?.team_number);
+  if (!Number.isFinite(teamNumber) || teamNumber < 1) {
+    throw new Error('Production Team ID sequence returned an invalid value.');
+  }
+
+  return `AN-${String(teamNumber).padStart(3, '0')}`;
+}
 export const productionStoreEnabled = Boolean(pool);
 
 export type DuplicateCode = 'TEAM_NAME_EXISTS' | 'EMAIL_EXISTS' | 'USN_EXISTS' | 'PHONE_EXISTS';
