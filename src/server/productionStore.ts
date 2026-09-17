@@ -201,6 +201,21 @@ export async function loadProductionTeams(): Promise<Team[]> {
   ]);
 }
 
+export async function getProductionTeam(teamId: string): Promise<Team | undefined> {
+  const rows = await sql`SELECT team_json FROM registrations WHERE LOWER(team_id) = ${teamId.toLowerCase()} LIMIT 1`;
+  return rows[0]?.team_json as Team | undefined;
+}
+
+export async function updateProductionTeamAudit(previous: Team, patch: Partial<Team>): Promise<Team | undefined> {
+  const rows = await sql`
+    UPDATE registrations
+    SET team_json = team_json || ${JSON.stringify(patch)}::jsonb
+    WHERE team_id = ${previous.id} AND team_json = ${JSON.stringify(previous)}::jsonb
+    RETURNING team_json
+  `;
+  return rows[0]?.team_json as Team | undefined;
+}
+
  export async function deleteProductionTeam(teamId: string): Promise<void> {
    if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
   await ensureProductionSchema();

@@ -517,7 +517,7 @@ export const AdminPortal: React.FC = () => {
       });
       const data = await res.json();
       if (data.success) {
-        setCmsConfig(prev => ({ ...prev, [flag]: next }));
+        setCmsConfig((prev: WebsiteCMSConfig) => ({ ...prev, [flag]: next }));
         showToast(`${next ? 'ENABLED' : 'DISABLED'} — ${label} is now ${next ? 'live on the participant portal' : 'shown as Coming Soon'}`);
       } else {
         showToast(`✕ Failed to update ${label}`);
