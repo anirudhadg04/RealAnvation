@@ -3743,7 +3743,6 @@ export const AdminPortal: React.FC = () => {
                         <th className="p-3">Participants</th>
                         <th className="p-3">Amount</th>
                         <th className="p-3">UTR</th>
-                        <th className="p-3">View Proof</th>
                         <th className="p-3">Status</th>
                         <th className="p-3">Action</th>
                       </tr>
@@ -3776,19 +3775,6 @@ export const AdminPortal: React.FC = () => {
                           </td>
                           <td className="p-3 font-mono font-bold text-emerald-400">₹{t.members.length * (cmsConfig.registrationFee || 250)}</td>
                           <td className="p-3 font-mono text-amber-300 font-bold break-all">{t.paymentUtr || 'N/A'}</td>
-                          <td className="p-3">
-                            {t.paymentScreenshot ? (
-                              <button
-                                type="button"
-                                onClick={() => setScreenshotPreview(t.paymentScreenshot)}
-                                className="px-2.5 py-1 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-800 font-bold text-[10px]"
-                              >
-                                View Proof
-                              </button>
-                            ) : (
-                              <span className="text-slate-500 text-[10px]">No proof</span>
-                            )}
-                          </td>
                           <td className="p-3">
                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                               t.paymentStatus === 'Verified' || t.paymentStatus === 'PAYMENT_APPROVED' ? 'bg-emerald-950 text-emerald-400 border-emerald-800' :
