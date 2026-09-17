@@ -1404,23 +1404,32 @@ export async function startServer(options: { listen?: boolean } = {}) {
   async function sendApprovalEmail(team: Team): Promise<void> {
     const smtp = getSmtpConfig();
     if (!smtp.configured) {
-      throw new Error("SMTP is not fully configured for approval delivery.");
+      console.warn("[EMAIL] SMTP not configured; skipping approval email for team", team.id);
+      return;
     }
     const transporter = nodemailer.createTransport({
       host: String(process.env.SMTP_HOST),
       port: Number(process.env.SMTP_PORT) || 587,
       secure: process.env.SMTP_SECURE === "true",
-      requireTLS: true,
-      auth: { user: String(process.env.SMTP_USER), pass: String(process.env.SMTP_PASS) }
+      auth: { user: String(process.env.SMTP_USER), pass: String(process.env.SMTP_PASS) },
+      tls: { rejectUnauthorized: false },
+      connectionTimeout: 10_000,
+      socketTimeout: 15_000,
     });
     const from = String(process.env.MAIL_FROM || process.env.SMTP_USER);
-    const recipients = team.members.map((m) => m.email);
+    const recipients = team.members.map((m) => m.email).filter(Boolean);
     const password = String(team.portalPasswordPlain || team.accessPassword || '');
     const subject = `ANVATION 2026 Registration Approved — Team ${team.id}`;
     const text = `Hello participants,\n\nYour team ${team.teamName} (${team.id}) has been approved by the admin.\n\nPayment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.\n\nPortal password: ${password}\n\nUse Team ID ${team.id} and this password to log in to the participant portal.\n\nTeam details:\n${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}`;
     const html = `<p>Hello participants,</p><p>Your team <b>${team.teamName}</b> (<b>${team.id}</b>) has been approved by the admin.</p><p><b>Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.</b></p><p><b>Portal password:</b> ${password}</p><p>Use Team ID <b>${team.id}</b> and this password to log in to the participant portal.</p><p>${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}</p>`;
-    await transporter.verify();
-    await Promise.all(recipients.map((recipient) => transporter.sendMail({ from, to: recipient, subject, text, html })));
+    try { await transporter.verify(); } catch (verifyErr) { console.warn('[EMAIL] transporter.verify() failed; attempting send anyway', verifyErr); }
+    for (const recipient of recipients) {
+      try {
+        await transporter.sendMail({ from, to: recipient, subject, text, html });
+      } catch (sendErr) {
+        console.error('[EMAIL] Failed to send approval email to', recipient, 'for team', team.id, sendErr);
+      }
+    }
   }
 
   // API Routes
@@ -2416,7 +2425,11 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       return res.status(404).json({ success: false, error: "Team not found" });
     }
     if (productionStoreEnabled) {
-      try { await deleteProductionTeam(id); } catch (e) { console.error('[DELETE] productionStore delete failed:', e); }
+      try { await deleteProductionTeam(id); }
+      catch (e) {
+        console.error('[DELETE] productionStore delete failed:', e);
+        return res.status(500).json({ success: false, error: 'Failed to delete team from database. Please try again or contact support.' });
+      }
     }
     rebuildUniquenessIndexes();
     res.json({ success: true, message: "Team deleted successfully" });
@@ -3790,6 +3803,8 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       const importedTeams: any[] = [];
       for (let i = 0; i < dataRows.length; i++) {
         const rd = preview[i].rowData!;
+        const accLower = String(rd.accommodation || "").toLowerCase();
+        const accRequired = accLower === "yes" || accLower === "true";
         const teamIndex = ++nextTeamNumber;
         const teamId = `AN-${String(teamIndex).padStart(3, '0')}`;
 
@@ -3804,7 +3819,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           gender: sanitizeInputString(rd.leaderGender),
           role: 'Leader',
           teamId,
-          accommodationRequired: accRequired2,
+          accommodationRequired: accRequired,
           checkedIn: false,
           foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
         };
@@ -3829,7 +3844,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
             gender: sanitizeInputString(p.gender),
             role: 'Member',
             teamId,
-accommodationRequired: accRequired2,
+accommodationRequired: accRequired,
             checkedIn: false,
             foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
           });
