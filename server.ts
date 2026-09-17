@@ -17,7 +17,7 @@ import { SEED_ANNOUNCEMENTS, SPONSORS } from "./src/data/mockData";
 import { Team, ProjectSubmission, JudgeScorecard, Announcement, SupportTicket, Participant, MilestoneReport, MentorBooking, WebsiteCMSConfig, AuditLog, AdminUser, AdminRole, RulebookVersion, EmailCampaign, RoomAllocation, JudgingRound, ScheduleItem, Checkpoint, Sponsor } from "./src/types";
 import { HACKATHON_TRACKS } from "./src/data/mockData";
 import { PAYMENT_UPI_ID, ocrContainsTransactionId } from "./src/utils/upiVerification";
-import { ensureProductionSchema, findProductionDuplicate, loadProductionTeams, productionStoreEnabled, saveProductionTeam, updateProductionTeam, deleteProductionTeam } from "./src/server/productionStore";
+import { ensureProductionSchema, findProductionDuplicate, loadProductionTeams, productionStoreEnabled, saveProductionTeam, updateProductionTeam, deleteProductionTeam, nextProductionTeamId } from "./src/server/productionStore";
 import { resolveAdminBootstrapPassword } from "./src/utils/adminAuth";
 
 const execFileAsync = promisify(execFile);
@@ -1814,8 +1814,17 @@ async function sendApprovalEmail(team: Team): Promise<void> {
         }
 
         // 5. Generate secure team IDs and password
-        const teamIndex = ++nextTeamNumber;
-        const teamId = `AN-${String(teamIndex).padStart(3, '0')}`;
+        let teamId: string;
+        let teamIndex: number;
+        if (productionStoreEnabled) {
+          teamId = await nextProductionTeamId();
+          const match = teamId.match(/AN-(\d+)/i);
+          teamIndex = match ? Number(match[1]) : ++nextTeamNumber;
+          nextTeamNumber = Math.max(nextTeamNumber, teamIndex);
+        } else {
+          teamIndex = ++nextTeamNumber;
+          teamId = `AN-${String(teamIndex).padStart(3, '0')}`;
+        }
         const genderAllowed = new Set(['Male', 'Female', 'Other', 'Prefer not to say']);
         const leaderGender = typeof leader.gender === 'string' && genderAllowed.has(leader.gender) ? leader.gender : '';
         if (!leaderGender) {
@@ -3601,6 +3610,9 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     if (!team) return res.status(404).json({ success: false, error: "Team not found" });
 
     if (paymentStatus === 'Rejected') {
+      if (team.approvalStatus === 'REJECTED') {
+        return res.json({ success: true, team, alreadyRejected: true, message: 'Team already rejected.' });
+      }
       const teamIndex = teams.findIndex((candidate) => candidate.id.toLowerCase() === team.id.toLowerCase() || (candidate.regNumber || '').toLowerCase() === team.id.toLowerCase());
       const previousApprovalStatus = team.approvalStatus || 'PENDING';
       team.approvalStatus = 'REJECTED';
