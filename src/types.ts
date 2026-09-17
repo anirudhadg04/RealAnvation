@@ -51,6 +51,10 @@ export interface Team {
   paymentAuditTimestamp?: string;
   collegeIdImages?: Record<string, string>;
   teamQrCode?: string;
+  qrToken?: string;
+  qrTokenHash?: string;
+  checkedInAt?: string;
+  checkedInBy?: string;
 }
 
 export interface ProjectSubmission {
