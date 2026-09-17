@@ -3816,106 +3816,64 @@ export const AdminPortal: React.FC = () => {
                 </div>
               </div>
 
-              {selectedLedgerTeam && (
-                <div className="fixed inset-0 z-[120] flex justify-end" role="dialog" aria-modal="true" aria-label={`Participant details for ${selectedLedgerTeam.teamName}`}>
-                  <button
-                    type="button"
-                    className="absolute inset-0 bg-black/80 backdrop-blur-md animate-fadeIn"
-                    aria-label="Close participant details"
-                    onClick={() => setSelectedLedgerTeam(null)}
-                  />
-                  <aside className="relative w-full max-w-md h-full bg-slate-900 border-l border-slate-700 shadow-2xl flex flex-col animate-fadeIn">
-                    <header className="shrink-0 p-5 border-b border-slate-800 bg-slate-950/70">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="min-w-0">
-                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-400">Participant Details</span>
-                          <h3 className="mt-1 text-lg font-black text-white truncate">{selectedLedgerTeam.teamName}</h3>
-                          <p className="text-[11px] font-mono text-slate-400">Team ID: {selectedLedgerTeam.id}</p>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedLedgerTeam(null)}
-                          className="shrink-0 p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
-                          aria-label="Close participant details"
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    </header>
+               {selectedLedgerTeam && (
+                 <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/80 backdrop-blur-md p-4" role="dialog" aria-modal="true" aria-label={`Participant details for ${selectedLedgerTeam.teamName}`}>
+                   <button
+                     type="button"
+                     className="absolute inset-0"
+                     aria-label="Close participant details"
+                     onClick={() => setSelectedLedgerTeam(null)}
+                   />
+                   <div className="relative w-full max-w-4xl bg-slate-900 border border-slate-700 rounded-3xl shadow-2xl flex flex-col max-h-[90vh] animate-fadeIn">
+                     <header className="shrink-0 p-5 border-b border-slate-800 bg-slate-950/70 flex items-start justify-between gap-4">
+                       <div className="min-w-0">
+                         <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-400">Participant Details</span>
+                         <h3 className="mt-1 text-lg font-black text-white truncate">{selectedLedgerTeam.teamName}</h3>
+                         <p className="text-[11px] font-mono text-slate-400">Team ID: {selectedLedgerTeam.id}</p>
+                       </div>
+                       <button
+                         type="button"
+                         onClick={() => setSelectedLedgerTeam(null)}
+                         className="shrink-0 p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                         aria-label="Close participant details"
+                       >
+                         <X className="w-5 h-5" />
+                       </button>
+                     </header>
 
-                    <div className="flex-1 overflow-y-auto p-5 space-y-5">
-                      {selectedLedgerTeam.members.map((member, index) => {
-                        const collegeIdImage = selectedLedgerTeam.collegeIdImages?.[index === 0 ? 'leader' : `p${index + 1}`];
-                        return (
-                          <section key={member.id} className="rounded-2xl bg-slate-950 border border-slate-800 p-4 space-y-3">
-                            <div className="flex items-center justify-between gap-3">
-                              <h4 className="text-[11px] font-black uppercase tracking-wider text-white">
-                                {index === 0 ? 'Team Leader' : `Participant ${index + 1}`}
-                              </h4>
-                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
-                                index === 0 ? 'bg-amber-950 text-amber-300 border-amber-800' : 'bg-slate-800 text-slate-300 border-slate-700'
-                              }`}>
-                                {member.role}
-                              </span>
-                            </div>
+                     <div className="flex-1 overflow-x-auto p-5">
+                       <div className="flex gap-4 min-w-max h-full">
+                         {selectedLedgerTeam.members.map((member, index) => (
+                           <div key={member.id} className="w-64 shrink-0 rounded-2xl bg-slate-950 border border-slate-800 p-4 space-y-3 flex flex-col">
+                             <div className="flex items-center justify-between gap-3">
+                               <h4 className="text-[11px] font-black uppercase tracking-wider text-white">
+                                 {index === 0 ? 'Team Leader' : `Participant ${index + 1}`}
+                               </h4>
+                               <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
+                                 index === 0 ? 'bg-amber-950 text-amber-300 border-amber-800' : 'bg-slate-800 text-slate-300 border-slate-700'
+                               }`}>
+                                 {member.role}
+                               </span>
+                             </div>
 
-                            <div className="space-y-2.5 text-xs">
-                              <div className="flex justify-between gap-4">
-                                <span className="text-slate-500 font-bold shrink-0">Name</span>
-                                <span className="text-white font-bold text-right break-words">{member.fullName || '—'}</span>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <span className="text-slate-500 font-bold shrink-0">Department</span>
-                                <span className="text-slate-300 text-right break-words">{member.department || '—'}</span>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <span className="text-slate-500 font-bold shrink-0">Semester</span>
-                                <span className="text-slate-300 text-right">{member.semester || '—'}</span>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <span className="text-slate-500 font-bold shrink-0">Email</span>
-                                <span className="text-slate-300 text-right break-all">{member.email || '—'}</span>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <span className="text-slate-500 font-bold shrink-0">Phone</span>
-                                <span className="text-slate-300 text-right">{member.phone || '—'}</span>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <span className="text-slate-500 font-bold shrink-0">Gender</span>
-                                <span className="text-slate-300 text-right">{member.gender || '—'}</span>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <span className="text-slate-500 font-bold shrink-0">College</span>
-                                <span className="text-slate-300 text-right break-words">{member.college || '—'}</span>
-                              </div>
-                              <div className="flex justify-between gap-4">
-                                <span className="text-slate-500 font-bold shrink-0">State</span>
-                                <span className="text-slate-300 text-right">{member.state || '—'}</span>
-                              </div>
-                              <div className="flex items-start justify-between gap-4">
-                                <span className="text-slate-500 font-bold shrink-0">College ID</span>
-                                <span className="text-right">
-                                  {collegeIdImage ? (
-                                    <button
-                                      type="button"
-                                      onClick={() => setSelectedCollegeIdImage({ src: collegeIdImage, label: `${member.fullName || 'Participant'} College ID` })}
-                                      className="text-cyan-300 hover:text-cyan-200 font-bold underline underline-offset-2"
-                                    >
-                                      View
-                                    </button>
-                                  ) : (
-                                    <span className="text-slate-300 font-mono break-all">{member.usn || '—'}</span>
-                                  )}
-                                </span>
-                              </div>
-                            </div>
-                          </section>
-                        );
-                      })}
-                    </div>
-                  </aside>
-                </div>
-              )}
+                             <div className="space-y-2.5 text-xs flex-1">
+                               <div><strong className="text-slate-500">Name</strong><span className="text-white font-bold block break-words">{member.fullName || '—'}</span></div>
+                               <div><strong className="text-slate-500">Department</strong><span className="text-slate-300 block break-words">{member.department || '—'}</span></div>
+                               <div><strong className="text-slate-500">Semester</strong><span className="text-slate-300 block">{member.semester || '—'}</span></div>
+                               <div><strong className="text-slate-500">Email</strong><span className="text-slate-300 block break-all">{member.email || '—'}</span></div>
+                               <div><strong className="text-slate-500">Phone</strong><span className="text-slate-300 block">{member.phone || '—'}</span></div>
+                               <div><strong className="text-slate-500">Gender</strong><span className="text-slate-300 block">{member.gender || '—'}</span></div>
+                               <div><strong className="text-slate-500">College</strong><span className="text-slate-300 block break-words">{member.college || '—'}</span></div>
+                               <div><strong className="text-slate-500">State</strong><span className="text-slate-300 block">{member.state || '—'}</span></div>
+                               <div><strong className="text-slate-500">Accommodation Required</strong><span className="text-slate-300 block">{member.accommodationRequired ? 'YES' : 'NO'}</span></div>
+                             </div>
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   </div>
+                 </div>
+               )}
 
               {selectedCollegeIdImage && (() => {
                 const isCollegeIdUrl = /^https?:\/\//i.test(selectedCollegeIdImage.src);
