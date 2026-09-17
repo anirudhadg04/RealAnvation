@@ -4597,10 +4597,10 @@ export const AdminPortal: React.FC = () => {
               <div className="flex items-center justify-between border-b border-slate-800 pb-3">
                 <div>
                   <h3 className="text-lg font-black text-white flex items-center gap-2">
-                    <Upload className="w-5 h-5 text-emerald-400" /> CSV Import — Team Registration
+                    <Upload className="w-5 h-5 text-emerald-400" /> XLSX Import — Team Registration
                   </h3>
                   <p className="text-xs text-slate-400">
-                    Upload a CSV file to bulk-import teams. All rows are validated before any data is written.
+                    Upload an XLSX file to bulk-import teams. All rows are validated before any data is written.
                   </p>
                 </div>
                 <button onClick={() => setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false })} className="p-1 rounded-lg hover:bg-slate-800 text-slate-400">
@@ -4726,7 +4726,7 @@ export const AdminPortal: React.FC = () => {
               {!csvImportModal.file && !csvImportModal.preview && !csvImportModal.validationError && (
                 <div className="p-8 rounded-2xl bg-slate-950 border border-slate-800 text-center space-y-3">
                   <Upload className="w-10 h-10 text-slate-600 mx-auto" />
-                  <p className="text-xs text-slate-400">Click <strong className="text-white">Upload CSV</strong> in the Finance tab to select a CSV file, or drag and drop.</p>
+                  <p className="text-xs text-slate-400">Click <strong className="text-white">Upload XLSX</strong> in the Finance tab to select an XLSX file, or drag and drop.</p>
                   <p className="text-[10px] text-slate-500">Required columns: Team Name, Select the Domain, College, Accommodation, Team Leader Full Name, Team Leader Email ID, Team Leader WhatsApp Number, Number of Teammates, Participant 2-4 (Name/Email/Phone), Transaction ID / UTR Number, Payment Slip</p>
                 </div>
               )}

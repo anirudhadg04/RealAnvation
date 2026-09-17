@@ -3613,7 +3613,6 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       const preview: PreviewRow[] = [];
       const importEmails = new Set<string>();
       const importPhones = new Set<string>();
-      const importUsns = new Set<string>();
       const importUtrs = new Set<string>();
       const importTeamNames = new Set<string>();
 
@@ -3639,7 +3638,6 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         const leaderEmail = (leader.email || "").trim();
         const leaderPhone = (leader.phone || "").trim();
         const leaderGender = (leader.gender || "").trim();
-        const leaderCollegeId = (leader.college_id || "").trim();
 
         const participants = Array.isArray(row.participants) ? row.participants : [];
         const p2 = participants[0] || {};
@@ -3647,26 +3645,28 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         const p4 = participants[2] || {};
 
         const p2FullName = (p2.full_name || "").trim();
+        const p2Department = (p2.department || "").trim();
+        const p2Semester = (p2.semester || "").trim();
         const p2Email = (p2.email || "").trim();
         const p2Phone = (p2.phone || "").trim();
         const p2Gender = (p2.gender || "").trim();
-        const p2CollegeId = (p2.college_id || "").trim();
 
         const p3FullName = (p3.full_name || "").trim();
+        const p3Department = (p3.department || "").trim();
+        const p3Semester = (p3.semester || "").trim();
         const p3Email = (p3.email || "").trim();
         const p3Phone = (p3.phone || "").trim();
         const p3Gender = (p3.gender || "").trim();
-        const p3CollegeId = (p3.college_id || "").trim();
 
         const p4FullName = (p4.full_name || "").trim();
+        const p4Department = (p4.department || "").trim();
+        const p4Semester = (p4.semester || "").trim();
         const p4Email = (p4.email || "").trim();
         const p4Phone = (p4.phone || "").trim();
         const p4Gender = (p4.gender || "").trim();
-        const p4CollegeId = (p4.college_id || "").trim();
 
         const numTeammates = parseInt(numTeammatesStr, 10);
         const cleanLeaderPhone = leaderPhone.replace(/[^0-9]/g, "");
-        const cleanLeaderCollegeId = leaderCollegeId.trim().toUpperCase();
         const cleanUtr = utr.toUpperCase();
 
         if (!teamName || teamName.length < 2 || teamName.length > 50) {
@@ -3685,23 +3685,20 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         if (!leaderGender) {
           errors.push("Team leader gender is required.");
         }
-        if (!leaderCollegeId) {
-          errors.push("Team leader college ID card is required.");
-        }
         if (!state) {
           errors.push("State is required.");
         }
-        if (numTeammates !== 2 && numTeammates !== 3) {
-          errors.push("Number of teammates must be 2 or 3.");
+        if (numTeammates < 2 || numTeammates > 4) {
+          errors.push("Number of teammates must be between 2 and 4.");
         }
 
         const participantDefs = [
-          { name: p2FullName, email: p2Email, phone: p2Phone, gender: p2Gender, collegeId: p2CollegeId, idx: 2 },
-          { name: p3FullName, email: p3Email, phone: p3Phone, gender: p3Gender, collegeId: p3CollegeId, idx: 3 },
-          { name: p4FullName, email: p4Email, phone: p4Phone, gender: p4Gender, collegeId: p4CollegeId, idx: 4 },
+          { name: p2FullName, email: p2Email, phone: p2Phone, gender: p2Gender, idx: 2 },
+          { name: p3FullName, email: p3Email, phone: p3Phone, gender: p3Gender, idx: 3 },
+          { name: p4FullName, email: p4Email, phone: p4Phone, gender: p4Gender, idx: 4 },
         ];
 
-        for (let j = 0; j < numTeammates; j++) {
+        for (let j = 0; j < numTeammates - 1; j++) {
           const p = participantDefs[j];
           if (!p.name) errors.push(`Participant ${p.idx} full name is required.`);
           if (!p.email || !/^[^\s@]+@gmail\.com$/i.test(p.email)) {
@@ -3714,13 +3711,16 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           if (!p.gender) {
             errors.push(`Participant ${p.idx} gender is required.`);
           }
-          if (!p.collegeId) {
-            errors.push(`Participant ${p.idx} college ID card is required.`);
-          }
         }
 
+        if (numTeammates === 2 && (p3FullName || p3Email || p3Phone)) {
+          errors.push("Participant 3 fields should be empty for 2-person teams.");
+        }
         if (numTeammates === 2 && (p4FullName || p4Email || p4Phone)) {
-          errors.push("Participant 4 fields should be empty for 2-teammate teams.");
+          errors.push("Participant 4 fields should be empty for 2-person teams.");
+        }
+        if (numTeammates === 3 && (p4FullName || p4Email || p4Phone)) {
+          errors.push("Participant 4 fields should be empty for 3-person teams.");
         }
 
         if (!utr || !/^\d{12}$/.test(cleanUtr)) {
@@ -3744,37 +3744,43 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         if (cleanLeaderPhone && importPhones.has(cleanLeaderPhone)) {
           errors.push(`Duplicate phone "${cleanLeaderPhone}" within import.`);
         }
-        if (cleanLeaderCollegeId && importUsns.has(cleanLeaderCollegeId)) {
-          errors.push(`Duplicate college ID "${cleanLeaderCollegeId}" within import.`);
-        }
         if (cleanUtr && importUtrs.has(cleanUtr)) {
           errors.push(`Duplicate UTR "${cleanUtr}" within import.`);
+        }
+
+        const teamEmails = [leaderEmail, p2Email, p3Email, p4Email].filter(Boolean);
+        const seenTeamEmails = new Set<string>();
+        for (const email of teamEmails) {
+          const clean = email.trim().toLowerCase();
+          if (seenTeamEmails.has(clean)) {
+            errors.push(`Duplicate participant email "${email}" within the same team.`);
+          }
+          seenTeamEmails.add(clean);
         }
 
         importTeamNames.add(normTeamName);
         if (leaderEmail) importEmails.add(leaderEmail.toLowerCase());
         if (cleanLeaderPhone) importPhones.add(cleanLeaderPhone);
-        if (cleanLeaderCollegeId) importUsns.add(cleanLeaderCollegeId);
         if (cleanUtr) importUtrs.add(cleanUtr);
 
-        const amount = numTeammates === 2 ? "₹750" : "₹1000";
+        const amount = numTeammates * 250;
 
         preview.push({
           rowIndex,
           teamName: teamName || "(empty)",
           leaderEmail: leaderEmail || "(empty)",
-          amount,
+          amount: `₹${amount}`,
           utr: cleanUtr || "(empty)",
           participantCount: numTeammates || 0,
           status: errors.length > 0 ? 'Invalid' : 'Valid',
           errors,
           rowData: {
             teamName, domain, college, city, district, state, accommodation,
-            leaderFullName, leaderDepartment, leaderSemester, leaderEmail, leaderPhone, leaderGender, leaderCollegeId,
+            leaderFullName, leaderDepartment, leaderSemester, leaderEmail, leaderPhone, leaderGender,
             numTeammates,
-            p2FullName, p2Department: leaderDepartment, p2Semester: leaderSemester, p2Email, p2Phone, p2Gender, p2CollegeId,
-            p3FullName, p3Department: leaderDepartment, p3Semester: leaderSemester, p3Email, p3Phone, p3Gender, p3CollegeId,
-            p4FullName, p4Department: leaderDepartment, p4Semester: leaderSemester, p4Email, p4Phone, p4Gender, p4CollegeId,
+            p2FullName, p2Department, p2Semester, p2Email, p2Phone, p2Gender,
+            p3FullName, p3Department, p3Semester, p3Email, p3Phone, p3Gender,
+            p4FullName, p4Department, p4Semester, p4Email, p4Phone, p4Gender,
             utr: cleanUtr
           }
         });
@@ -3796,21 +3802,16 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           p.errors.push(`Leader phone "${cleanLeaderPhone}" already exists in database.`);
           p.status = 'Invalid';
         }
-        const cleanLeaderCollegeId = rd.leaderCollegeId.trim().toUpperCase();
-        if (cleanLeaderCollegeId && registeredUsns.has(cleanLeaderCollegeId)) {
-          p.errors.push(`Leader college ID "${cleanLeaderCollegeId}" already exists in database.`);
-          p.status = 'Invalid';
-        }
         if (rd.utr && registeredUtrs.has(rd.utr)) {
           p.errors.push(`UTR "${rd.utr}" already exists in database.`);
           p.status = 'Invalid';
         }
         const participantDefs = [
-          { email: rd.p2Email, phone: rd.p2Phone, collegeId: rd.p2CollegeId, idx: 2 },
-          { email: rd.p3Email, phone: rd.p3Phone, collegeId: rd.p3CollegeId, idx: 3 },
-          { email: rd.p4Email, phone: rd.p4Phone, collegeId: rd.p4CollegeId, idx: 4 },
+          { email: rd.p2Email, phone: rd.p2Phone, idx: 2 },
+          { email: rd.p3Email, phone: rd.p3Phone, idx: 3 },
+          { email: rd.p4Email, phone: rd.p4Phone, idx: 4 },
         ];
-        for (let j = 0; j < rd.numTeammates; j++) {
+        for (let j = 0; j < rd.numTeammates - 1; j++) {
           const pdef = participantDefs[j];
           if (pdef.email && registeredEmails.has(pdef.email.toLowerCase())) {
             p.errors.push(`Participant ${pdef.idx} email "${pdef.email}" already exists in database.`);
@@ -3819,11 +3820,6 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           const cleanPhone = pdef.phone.replace(/[^0-9]/g, "");
           if (cleanPhone && registeredPhones.has(cleanPhone)) {
             p.errors.push(`Participant ${pdef.idx} phone "${cleanPhone}" already exists in database.`);
-            p.status = 'Invalid';
-          }
-          const cleanCollegeId = pdef.collegeId.trim().toUpperCase();
-          if (cleanCollegeId && registeredUsns.has(cleanCollegeId)) {
-            p.errors.push(`Participant ${pdef.idx} college ID "${cleanCollegeId}" already exists in database.`);
             p.status = 'Invalid';
           }
         }
@@ -3863,7 +3859,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           state: sanitizeInputString(rd.state),
           email: rd.leaderEmail,
           phone: sanitizeInputString(rd.leaderPhone),
-          usn: sanitizeInputString(rd.leaderCollegeId.trim().toUpperCase()),
+          usn: '',
           gender: sanitizeInputString(rd.leaderGender),
           role: 'Leader',
           teamId,
@@ -3874,12 +3870,12 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
 
         const members: Participant[] = [];
         const participantDefs = [
-          { name: rd.p2FullName, email: rd.p2Email, phone: rd.p2Phone, gender: rd.p2Gender, collegeId: rd.p2CollegeId },
-          { name: rd.p3FullName, email: rd.p3Email, phone: rd.p3Phone, gender: rd.p3Gender, collegeId: rd.p3CollegeId },
-          { name: rd.p4FullName, email: rd.p4Email, phone: rd.p4Phone, gender: rd.p4Gender, collegeId: rd.p4CollegeId },
+          { name: rd.p2FullName, email: rd.p2Email, phone: rd.p2Phone, gender: rd.p2Gender },
+          { name: rd.p3FullName, email: rd.p3Email, phone: rd.p3Phone, gender: rd.p3Gender },
+          { name: rd.p4FullName, email: rd.p4Email, phone: rd.p4Phone, gender: rd.p4Gender },
         ];
 
-        for (let j = 0; j < rd.numTeammates; j++) {
+        for (let j = 0; j < rd.numTeammates - 1; j++) {
           const p = participantDefs[j];
           members.push({
             id: `p-${teamIndex}-${j + 2}`,
@@ -3888,7 +3884,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
             state: sanitizeInputString(rd.state),
             email: p.email,
             phone: sanitizeInputString(p.phone),
-            usn: sanitizeInputString(p.collegeId.trim().toUpperCase()),
+            usn: '',
             gender: sanitizeInputString(p.gender),
             role: 'Member',
             teamId,
@@ -3914,14 +3910,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           projectSubmitted: false,
           paymentUtr: rd.utr,
           paymentStatus: 'PENDING_PAYMENT_AUDIT' as any,
-          paymentAmountDetail: `Pending admin payment audit for ${cmsConfig.registrationFee || 250} INR`,
-          paymentScreenshot: null,
-          collegeIdImages: {
-            leader: null,
-            p2: null,
-            p3: null,
-            p4: null
-          },
+          paymentAmountDetail: `Pending admin payment audit for ${rd.numTeammates * 250} INR`,
           credentialDeliveryStatus: 'queued',
           approvalStatus: 'PENDING',
           approvalTimestamp: '',
@@ -3933,7 +3922,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           try {
             await saveProductionTeam(newTeam);
           } catch (storageError: any) {
-             console.error("[DATABASE] Production XLSX import write failed:", storageError?.message || storageError);
+            console.error("[DATABASE] Production XLSX import write failed:", storageError?.message || storageError);
             return res.status(503).json({ success: false, error: "Production registration storage is temporarily unavailable." });
           }
         }
