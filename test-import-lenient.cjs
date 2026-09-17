@@ -91,7 +91,19 @@ wb.xlsx.readFile('C:\\Users\\gurur\\TF3\\RealAnvation\\sample-xlsx\\test.xlsx').
   const p3 = participantBlock(3);
   const p4 = participantBlock(4);
 
-  const getCell = (row, idx) => idx >= 0 ? String(row['col_' + (idx + 1)] ?? '').trim() : '';
+  const getCell = (row, idx) => {
+    if (idx < 0) return '';
+    const cell = ws.getCell(row._row, idx + 1);
+    let val = cell.value;
+    if (val && typeof val === 'object' && 'text' in val) val = val.text;
+    if (val && typeof val === 'object' && 'value' in val) val = val.value;
+    if (typeof val === 'object' && val !== null) {
+      if (val.r != null && val.t === 'n') val = val.r;
+      else if (val.t === 'd') val = val.v ? new Date(val.v).toISOString() : '';
+      else val = String(val);
+    }
+    return String(val ?? '').trim();
+  };
 
   const dataRows = [];
   for (let i = 1; i < rows.length; i++) {

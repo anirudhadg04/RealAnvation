@@ -1130,6 +1130,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   const [xlsxImportError, setXlsxImportError] = useState<string | null>(null);
   const [xlsxValidating, setXlsxValidating] = useState(false);
   const csvFileRef = React.useRef<HTMLInputElement>(null);
+  const wsRef = React.useRef<ExcelJS.Worksheet | null>(null);
 
   const handleXlsxFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1151,6 +1152,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         setXlsxImportError('No worksheet found in the workbook.');
         return;
       }
+      wsRef.current = ws;
 
       // Extract embedded images keyed by worksheet anchor (row/column)
       const imageMap: Record<string, string> = {};
@@ -1326,37 +1328,50 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       return -1;
     };
 
-    // Shared columns (first occurrence)
-    const fieldMap: Record<string, number> = {
-      team_name:               findCol(['team name']),
-      domain:                  findCol(['select the domain']),
-      college:                 findCol(['college']),
-      city:                    findCol(['city']),
-      district:                findCol(['district']),
-      state:                   findCol(['state']),
-      accommodation:           findCol(['accommodation']),
-      leader_full_name:        findCol(['team leader full name']),
-      leader_department:       findCol(['department']),
-      leader_semester:         findCol(['semester']),
-      leader_email:            findCol(['team leader email']),
-      leader_phone:            findCol(['team leader whatsapp']) || findCol(['team leader phone']),
-      leader_gender:           findCol(['team leader gender']),
-      num_teammates:           findCol(['number of teammates']),
-      utr_col1:                findCol(['transaction id', 'utr']) || findCol(['utr']),
-      utr_col2:                findNthCol(['transaction id', 'utr'], 1) || findNthCol(['utr'], 1),
-      utr_col3:                findNthCol(['transaction id', 'utr'], 2) || findNthCol(['utr'], 2),
+    // Column indices from spreadsheet layout (0-based).
+    // DEPARTMENT: J1,R1,Y1,AF1,AM1,AT1,BA1  SEMESTER: K1,S1,Z1,AG1,AN1,AU1,BB1
+    // P2: Q1,X1,AL1  AA1,AO1  AB1,AP1  AC1,AQ1
+    // P3: AE1,AS1  AH1,AV1  AI1,AW1  AJ1,AX1
+    // P4: "-"  BC1  BD1  BE1
+    // UTR: BI1,BM1,BQ1
+    const fieldMap: Record<string, number[]> = {
+      team_name:               [findCol(['team name'])],
+      domain:                  [findCol(['select the domain'])],
+      college:                 [findCol(['college'])],
+      city:                    [findCol(['city'])],
+      district:                [findCol(['district'])],
+      state:                   [findCol(['state'])],
+      accommodation:           [findCol(['accommodation'])],
+      leader_full_name:        [findCol(['team leader full name'])],
+      leader_department:       [9, 17, 24, 31, 38, 45, 52],
+      leader_semester:         [10, 18, 25, 32, 39, 46, 53],
+      leader_email:            [findCol(['team leader email'])],
+      leader_phone:            [findCol(['team leader whatsapp']) || findCol(['team leader phone'])],
+      leader_gender:           [findCol(['team leader gender'])],
+      num_teammates:           [findCol(['number of teammates'])],
+      utr_cols:                [60, 64, 68],
     };
 
-    // Participant 2 → 4 blocks. Each block repeats the same sub-columns.
-    const participantBlock = (n: number) => {
-      const blockIdx = n - 2;
+    // Participant blocks: each field has an array of column indices to check.
+    const participantBlock = (n: number): Record<string, number[]> => {
+      if (n === 4) {
+        return {
+          full_name:  [],
+          department: [],
+          semester:   [],
+          email:      [54],
+          phone:      [55],
+          gender:     [56],
+        };
+      }
+      const base = (n - 2) * 7;
       return {
-        full_name:    findNthCol(['participant', `${n}`, 'full name'], blockIdx),
-        department:   findNthCol(['department'], blockIdx + 1),
-        semester:     findNthCol(['semester'],   blockIdx + 1),
-        email:        findNthCol(['email'],      blockIdx + 1),
-        phone:        (() => { const idx = findNthCol(['phone'], blockIdx + 1); return idx >= 0 ? idx : findNthCol(['whatsapp'], blockIdx + 1); })(),
-        gender:       findNthCol(['gender'],     blockIdx + 1),
+        full_name:  [16 + base, 23 + base, 29 + base],
+        department: [9 + base, 17 + base, 24 + base, 31 + base, 38 + base, 45 + base, 52 + base],
+        semester:   [10 + base, 18 + base, 25 + base, 32 + base, 39 + base, 46 + base, 53 + base],
+        email:      [26 + base, 40 + base],
+        phone:      [27 + base, 41 + base],
+        gender:     [28 + base, 42 + base],
       };
     };
 
@@ -1365,15 +1380,15 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
     const p4 = participantBlock(4);
 
     // Validate required columns
-    const required: Array<[string, number]> = [
+    const required: Array<[string, number[]]> = [
       ['Team Name',            fieldMap.team_name],
       ['College',              fieldMap.college],
       ['Team Leader Full Name',fieldMap.leader_full_name],
       ['Team Leader Email ID', fieldMap.leader_email],
       ['Team Leader WhatsApp', fieldMap.leader_phone],
-      ['Transaction ID / UTR', fieldMap.utr],
+      ['Transaction ID / UTR', fieldMap.utr_cols],
     ];
-    const missing = required.filter(([, idx]) => idx < 0).map(([name]) => name);
+    const missing = required.filter(([, idxs]) => idxs.every(i => i < 0 || i >= headers.length)).map(([name]) => name);
     if (missing.length) {
       throw new Error(
         `Missing required column(s): ${missing.join(', ')}. ` +
@@ -1381,48 +1396,69 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       );
     }
 
-    const getCell = (row: Record<string, string>, idx: number): string =>
-      idx >= 0 ? String(row[`col_${idx + 1}`] ?? '').trim() : '';
+    const extractCellValue = (val: any): string => {
+      if (val && typeof val === 'object' && 'text' in val) val = val.text;
+      if (val && typeof val === 'object' && 'value' in val) val = val.value;
+      if (typeof val === 'object' && val !== null) {
+        if (val.r != null && val.t === 'n') val = val.r;
+        else if (val.t === 'd') val = val.v ? new Date(val.v).toISOString() : '';
+        else val = String(val);
+      }
+      return String(val ?? '').trim();
+    };
+
+    const getCell = (currentRow: number, idxs: number[]): string => {
+      const ws = wsRef.current;
+      if (!ws) return '';
+      for (const idx of idxs) {
+        if (idx >= 0 && idx < headers.length) {
+          const val = extractCellValue(ws.getCell(currentRow, idx + 1).value);
+          if (val) return val;
+        }
+      }
+      return '';
+    };
 
     // Build nested data rows
     const dataRows: any[] = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      const teamName = getCell(row, fieldMap.team_name);
+      const currentRow = row._row;
+      const teamName = getCell(currentRow, fieldMap.team_name);
       if (!teamName) continue; // skip blank rows
 
-      const numTeammates = parseInt(getCell(row, fieldMap.num_teammates), 10);
+      const numTeammates = parseInt(getCell(currentRow, fieldMap.num_teammates), 10);
       const participantCount = (numTeammates >= 2 && numTeammates <= 4) ? numTeammates : 0;
 
       dataRows.push({
         team_name:           teamName,
-        domain:              getCell(row, fieldMap.domain),
-        college:             getCell(row, fieldMap.college),
-        city:                getCell(row, fieldMap.city),
-        district:            getCell(row, fieldMap.district),
-        state:               getCell(row, fieldMap.state),
-        accommodation:       getCell(row, fieldMap.accommodation),
+        domain:              getCell(currentRow, fieldMap.domain),
+        college:             getCell(currentRow, fieldMap.college),
+        city:                getCell(currentRow, fieldMap.city),
+        district:            getCell(currentRow, fieldMap.district),
+        state:               getCell(currentRow, fieldMap.state),
+        accommodation:       getCell(currentRow, fieldMap.accommodation),
         num_teammates:       String(participantCount),
         leader: {
-          full_name:   getCell(row, fieldMap.leader_full_name),
-          department:  getCell(row, fieldMap.leader_department),
-          semester:    getCell(row, fieldMap.leader_semester),
-          email:       getCell(row, fieldMap.leader_email),
-          phone:       getCell(row, fieldMap.leader_phone),
-          gender:      getCell(row, fieldMap.leader_gender),
+          full_name:   getCell(currentRow, fieldMap.leader_full_name),
+          department:  getCell(currentRow, fieldMap.leader_department),
+          semester:    getCell(currentRow, fieldMap.leader_semester),
+          email:       getCell(currentRow, fieldMap.leader_email),
+          phone:       getCell(currentRow, fieldMap.leader_phone),
+          gender:      getCell(currentRow, fieldMap.leader_gender),
         },
         participants: [p2, p3, p4]
           .map((block) => ({
-            full_name:   getCell(row, block.full_name),
-            department:  getCell(row, block.department),
-            semester:    getCell(row, block.semester),
-            email:       getCell(row, block.email),
-            phone:       getCell(row, block.phone),
-            gender:      getCell(row, block.gender),
+            full_name:   getCell(currentRow, block.full_name),
+            department:  getCell(currentRow, block.department),
+            semester:    getCell(currentRow, block.semester),
+            email:       getCell(currentRow, block.email),
+            phone:       getCell(currentRow, block.phone),
+            gender:      getCell(currentRow, block.gender),
           }))
           .filter(p => p.full_name !== ''),
         payment: {
-          utr:           getCell(row, fieldMap.utr_col1) || getCell(row, fieldMap.utr_col2) || getCell(row, fieldMap.utr_col3) || '-',
+          utr:           getCell(currentRow, fieldMap.utr_cols) || '-',
         },
       });
     }
