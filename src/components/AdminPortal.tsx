@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import ExcelJS from 'exceljs';
 import { SEED_SUBMISSIONS, SEED_ANNOUNCEMENTS, HACKATHON_TRACKS } from '../data/mockData';
 import { 
   Team, ProjectSubmission, JudgeScorecard, Announcement, SupportTicket, 
@@ -13,7 +14,7 @@ import {
   UserPlus, Filter, X, Zap, Layers, Calendar, ChevronRight, HelpCircle,
   AlertCircle, Database, Activity, Building, Briefcase, UserCheck, Server,
   Sliders, FileCode, Share2, Compass, Printer, PieChart, TrendingUp, Maximize2,
-  QrCode, UserMinus, Handshake, Upload, Eye
+  QrCode, UserMinus, Handshake, Upload
 } from 'lucide-react';
 import { CheckInScanner } from './CheckInScanner';
 
@@ -194,10 +195,11 @@ export const AdminPortal: React.FC = () => {
   // Modals State
   const [selectedParticipantModal, setSelectedParticipantModal] = useState<Participant | null>(null);
   const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [selectedCollegeIdImage, setSelectedCollegeIdImage] = useState<{ src: string; label: string } | null>(null);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [isEditTeamModalOpen, setIsEditTeamModalOpen] = useState(false);
   const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
-  const [expandedLedgerTeams, setExpandedLedgerTeams] = useState<Set<string>>(new Set());
+  const [selectedLedgerTeam, setSelectedLedgerTeam] = useState<Team | null>(null);
   const [scoreOverrideModal, setScoreOverrideModal] = useState<{ open: boolean; submissionId: string; currentScore: number; reason: string }>({
     open: false,
     submissionId: '',
@@ -1119,30 +1121,112 @@ export const AdminPortal: React.FC = () => {
   };
 
   const [csvContent, setCsvContent] = useState<string>('');
-  const [csvValidating, setCsvValidating] = useState(false);
+  const [xlsxImportData, setXlsxImportData] = useState<any[] | null>(null);
+  const [xlsxImportError, setXlsxImportError] = useState<string | null>(null);
+  const [xlsxValidating, setXlsxValidating] = useState(false);
   const csvFileRef = React.useRef<HTMLInputElement>(null);
 
-  const handleCsvFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleXlsxFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const text = String(ev.target?.result || '');
-      setCsvContent(text);
-      setCsvValidating(false);
+    const lowerName = file.name.toLowerCase();
+    if (!lowerName.endsWith('.xlsx')) {
+      showToast('Please upload an Excel (.xlsx) file.');
+      e.target.value = '';
+      return;
+    }
+    setXlsxImportError(null);
+    setXlsxValidating(true);
+    try {
+      const buffer = await file.arrayBuffer();
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(buffer);
+      const ws = wb.worksheets[0];
+      if (!ws) {
+        setXlsxImportError('No worksheet found in the workbook.');
+        return;
+      }
+
+      // Extract embedded images keyed by worksheet anchor (row/column)
+      const imageMap: Record<string, string> = {};
+      const promises: Promise<void>[] = [];
+      (ws.getImages() || []).forEach((img: any) => {
+        promises.push((async () => {
+          try {
+            const media = wb.getImage(img.imageId) as any;
+            if (!media) return;
+            let raw: Uint8Array | null = null;
+            if (media.buffer) {
+              raw = media.buffer instanceof Uint8Array ? media.buffer : new Uint8Array(media.buffer);
+            } else if (media.base64) {
+              const bin = atob(media.base64);
+              raw = new Uint8Array(bin.length);
+              for (let k = 0; k < bin.length; k++) raw[k] = bin.charCodeAt(k);
+            }
+            if (!raw) return;
+            const ext = (media.extension || 'png').toLowerCase();
+            const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'gif' ? 'image/gif' : 'image/png';
+            let b64 = '';
+            const CHUNK = 0x8000;
+            for (let i = 0; i < raw.length; i += CHUNK) {
+              b64 += btoa(String.fromCharCode(...raw.subarray(i, i + CHUNK)));
+            }
+            const dataUrl = `data:${mime};base64,${b64}`;
+            const tl = img.range && img.range.tl;
+            const row = tl ? tl.row : 0;
+            const col = tl ? tl.col : 0;
+            imageMap[`${row}:${col}`] = dataUrl;
+          } catch (err) {
+            console.warn('[XLSX image extraction failed]', err);
+          }
+        })());
+      });
+      await Promise.all(promises);
+
+      const rows: any[] = [];
+      ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+        const obj: any = {};
+        row.eachCell({ includeEmpty: false }, (cell, colNumber) => {
+          let val: any = cell.value;
+          if (val && typeof val === 'object' && 'text' in val) val = val.text;
+          if (val && typeof val === 'object' && 'value' in val) val = val.value;
+          if (typeof val === 'object' && val !== null) {
+            if (val.r != null && val.t === 'n') val = val.r;
+            else if (val.t === 'd') val = val.v ? new Date(val.v).toISOString() : '';
+            else val = String(val);
+          }
+          obj[`col_${colNumber}`] = String(val ?? '');
+          const img = imageMap[`${rowNumber - 1}:${colNumber - 1}`];
+          if (img) obj[`img_${colNumber}`] = img;
+        });
+        obj._row = rowNumber;
+        obj._images = imageMap;
+        rows.push(obj);
+      });
+
+      setXlsxImportData(rows);
       setCsvImportModal({ open: true, file, preview: null, validationError: null, importing: false });
-    };
-    reader.readAsText(file);
+    } catch (err: any) {
+      setXlsxImportError(err?.message || 'Failed to parse XLSX file.');
+      showToast('✕ Failed to parse XLSX file.');
+    } finally {
+      setXlsxValidating(false);
+    }
   };
 
-  const handleCsvValidate = async () => {
-    setCsvValidating(true);
+  const handleXlsxValidate = async () => {
+    if (!xlsxImportData || xlsxImportData.length < 2) {
+      setXlsxImportError('No data rows found in the workbook.');
+      return;
+    }
+    setXlsxValidating(true);
     setCsvImportModal(prev => ({ ...prev, preview: null, validationError: null }));
     try {
+      const payload = buildXlsxImportPayload(xlsxImportData);
       const res = await fetch('/api/admin/import-csv', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csvContent, confirm: false })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data.success) {
@@ -1160,23 +1244,25 @@ export const AdminPortal: React.FC = () => {
     } catch (err) {
       setCsvImportModal(prev => ({ ...prev, validationError: 'Network error during validation.' }));
     } finally {
-      setCsvValidating(false);
+      setXlsxValidating(false);
     }
   };
 
-  const handleCsvImport = async () => {
+  const handleXlsxImport = async () => {
+    if (!xlsxImportData) return;
     setCsvImportModal(prev => ({ ...prev, importing: true }));
     try {
+      const payload = buildXlsxImportPayload(xlsxImportData);
       const res = await fetch('/api/admin/import-csv', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ csvContent, confirm: true })
+        body: JSON.stringify({ ...payload, confirm: true })
       });
       const data = await res.json();
       if (data.success) {
         showToast(`✓ Imported ${data.count} team(s) into PENDING_PAYMENT_AUDIT flow.`);
         setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false });
-        setCsvContent('');
+        setXlsxImportData(null);
         fetchAdminData();
       } else {
         setCsvImportModal(prev => ({
@@ -1188,6 +1274,92 @@ export const AdminPortal: React.FC = () => {
     } catch (err) {
       setCsvImportModal(prev => ({ ...prev, importing: false, validationError: 'Network error during import.' }));
     }
+  };
+
+  const buildXlsxImportPayload = (rows: any[]) => {
+    const headerRow = rows[0];
+    const headers: string[] = [];
+    for (let c = 1; c <= 40; c++) {
+      const v = headerRow[`col_${c}`];
+      if (v === undefined) break;
+      headers.push(String(v).trim().toLowerCase());
+    }
+
+    const findIdx = (aliases: string[]) =>
+      aliases.findIndex(a => headers.includes(a.toLowerCase()));
+
+    const fieldMap: Record<string, number> = {};
+    const requiredColumns: Record<string, string[]> = {
+      team_name: ["team name"],
+      domain: ["select the domain"],
+      college: ["college"],
+      city: ["city"],
+      district: ["district"],
+      state: ["states"],
+      accommodation: ["accommodation"],
+      leader_full_name: ["team leader full name"],
+      leader_department: ["team leader department"],
+      leader_semester: ["team leader semester"],
+      leader_email: ["team leader email id"],
+      leader_phone: ["team leader whatsapp number"],
+      leader_gender: ["team leader gender"],
+      leader_college_id: ["team leader college id card"],
+      num_teammates: ["number of teammates"],
+      p2_full_name: ["participant 2 full name"],
+      p2_department: ["participant 2 department"],
+      p2_semester: ["participant 2 semester"],
+      p2_email: ["participant 2 email id"],
+      p2_phone: ["participant 2 phone number"],
+      p2_gender: ["participant 2 gender"],
+      p2_college_id: ["participant 2 college id card"],
+      p3_full_name: ["participant 3 full name"],
+      p3_department: ["participant 3 department"],
+      p3_semester: ["participant 3 semester"],
+      p3_email: ["participant 3 email id"],
+      p3_phone: ["participant 3 phone number"],
+      p3_gender: ["participant 3 gender"],
+      p3_college_id: ["participant 3 college id card"],
+      p4_full_name: ["participant 4 full name"],
+      p4_department: ["participant 4 department"],
+      p4_semester: ["participant 4 semester"],
+      p4_email: ["participant 4 email id"],
+      p4_phone: ["participant 4 phone number"],
+      p4_gender: ["participant 4 gender"],
+      p4_college_id: ["participant 4 college id card"],
+      utr: ["transaction id / utr number"],
+      payment_screenshot: ["payment slip"],
+      payment_confirmation: ["payment confirmation"]
+    };
+
+    for (const [key, aliases] of Object.entries(requiredColumns)) {
+      const idx = findIdx(aliases);
+      if (idx === -1) {
+        throw new Error(`Missing required column: "${aliases[0]}". Found columns: ${headers.join(", ")}`);
+      }
+      fieldMap[key] = idx;
+    }
+
+    const dataRows: any[] = [];
+    const images: any[] = [];
+    for (let i = 1; i < rows.length; i++) {
+      const row = rows[i];
+      const arr: string[] = [];
+      const rowImages: Record<string, string> = {};
+      for (let c = 0; c < headers.length; c++) {
+        arr.push(row[`col_${c + 1}`] || '');
+        const img = row[`img_${c + 1}`];
+        if (img) rowImages[`col_${c + 1}`] = img;
+      }
+      dataRows.push(arr);
+      images.push(rowImages);
+    }
+
+    return {
+      rows: dataRows,
+      fieldMap,
+      images,
+      confirm: false
+    };
   };
 
   const exportCSV = (data: any[], filename: string) => {
@@ -3523,7 +3695,7 @@ export const AdminPortal: React.FC = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={() => csvFileRef.current?.click()} className="px-3 py-1.5 rounded-xl bg-emerald-950 hover:bg-emerald-900 border border-emerald-700/60 text-xs font-bold text-emerald-300 flex items-center gap-1.5">
-                    <Upload className="w-3.5 h-3.5" /> Import Participants CSV
+                    <Upload className="w-3.5 h-3.5" /> Import Participants XLSX
                   </button>
                   <button onClick={() => exportCSV(teams, 'KS_HACKNOVE_FINANCE')} className="px-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs font-bold text-white flex items-center gap-1.5">
                     <Download className="w-3.5 h-3.5" /> Export Financial Report
@@ -3531,7 +3703,7 @@ export const AdminPortal: React.FC = () => {
                 </div>
 
                 {/* Hidden CSV file input — kept mounted so the Import button can open the native picker */ }
-                <input ref={csvFileRef} type="file" accept=".csv" className="hidden" onChange={handleCsvFileChange} />
+                <input ref={csvFileRef} type="file" accept=".xlsx" className="hidden" onChange={handleXlsxFileChange} />
               </div>
 
               {/* Finance Overview Cards */}
@@ -3565,18 +3737,16 @@ export const AdminPortal: React.FC = () => {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <thead className="bg-slate-900 text-slate-400 font-mono text-[10px] uppercase border-b border-slate-800">
-<tr>
-                         <th className="p-3">Team ID &amp; Name</th>
-                         <th className="p-3">Leader Email</th>
-                         <th className="p-3">Participants</th>
-                         <th className="p-3">Amount</th>
-                         <th className="p-3">Payment Detail</th>
-                         <th className="p-3">UTR Reference No</th>
-                         <th className="p-3">Screenshot</th>
-                         <th className="p-3">Status</th>
-                         <th className="p-3">Team Status</th>
-                         <th className="p-3">Action</th>
-                       </tr>
+                      <tr>
+                        <th className="p-3">Team</th>
+                        <th className="p-3">Leader</th>
+                        <th className="p-3">Participants</th>
+                        <th className="p-3">Amount</th>
+                        <th className="p-3">UTR</th>
+                        <th className="p-3">View Proof</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Action</th>
+                      </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800 font-sans">
                       {teams.map((t) => (
@@ -3585,22 +3755,27 @@ export const AdminPortal: React.FC = () => {
                             <div>{t.teamName}</div>
                             <div className="font-mono text-[10px] text-cyan-400">{t.id}</div>
                           </td>
-<td className="p-3 text-slate-300 text-[11px]">{t.leaderEmail}</td>
-                           <td className="p-3">
-                             <div className="flex -space-x-2">
-                               {t.members.slice(0, 3).map((m, idx) => (
-                                 <span key={m.id} className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-[9px] font-bold text-slate-300 flex items-center justify-center" title={m.fullName}>
-                                   {m.fullName?.charAt(0) || '?'}
-                                 </span>
-                               ))}
-                               {t.members.length > 3 && (
-                                 <span className="w-6 h-6 rounded-full bg-slate-950 border border-slate-700 text-[9px] font-bold text-slate-400 flex items-center justify-center">+{t.members.length - 3}</span>
-                               )}
-                             </div>
-                           </td>
-                           <td className="p-3 font-mono font-bold text-emerald-400">₹{t.members.length * (cmsConfig.registrationFee || 250)}</td>
-                          <td className="p-3 text-slate-300 text-[11px] min-w-48">{t.paymentAmountDetail || 'Not specified'}</td>
-                          <td className="p-3 font-mono text-amber-300 font-bold">{t.paymentUtr || 'N/A'}</td>
+                          <td className="p-3 text-slate-300 text-[11px]">
+                            <div className="font-bold text-white">{t.members[0]?.fullName || '—'}</div>
+                            <div className="text-slate-500">{t.leaderEmail || '—'}</div>
+                          </td>
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <div className="flex -space-x-2">
+                                {t.members.slice(0, 3).map((m) => (
+                                  <span key={m.id} className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 text-[9px] font-bold text-slate-300 flex items-center justify-center" title={m.fullName}>
+                                    {m.fullName?.charAt(0) || '?'}
+                                  </span>
+                                ))}
+                                {t.members.length > 3 && (
+                                  <span className="w-6 h-6 rounded-full bg-slate-950 border border-slate-700 text-[9px] font-bold text-slate-400 flex items-center justify-center">+{t.members.length - 3}</span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-slate-500">{t.members.length}</span>
+                            </div>
+                          </td>
+                          <td className="p-3 font-mono font-bold text-emerald-400">₹{t.members.length * (cmsConfig.registrationFee || 250)}</td>
+                          <td className="p-3 font-mono text-amber-300 font-bold break-all">{t.paymentUtr || 'N/A'}</td>
                           <td className="p-3">
                             {t.paymentScreenshot ? (
                               <button
@@ -3623,97 +3798,188 @@ export const AdminPortal: React.FC = () => {
                               {t.paymentStatus || 'Pending'}
                             </span>
                           </td>
-                          <td className="p-3 text-slate-300 text-[11px]">{t.status}</td>
-                          <td className="p-3 flex items-center gap-2">
-                            <button
-                              onClick={() => handleVerifyUTR(t.id, 'Verified')}
-                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]"
-                            >
-                              Approve
-                            </button>
-                            <button
-                              onClick={() => handleVerifyUTR(t.id, 'Rejected')}
-                              className="px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-bold text-[10px]"
-                            >
-                              Reject
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const next = new Set(expandedLedgerTeams);
-                                if (next.has(t.id)) next.delete(t.id); else next.add(t.id);
-                                setExpandedLedgerTeams(next);
-                              }}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 font-bold text-[10px] flex items-center gap-1 transition-colors"
-                            >
-                              <Eye className="w-3 h-3" />
-                              View Participants
-                            </button>
-                            {expandedLedgerTeams.has(t.id) && (
-                              <div className="mt-3 pt-3 border-t border-slate-800/60 space-y-2">
-                                {t.members.map((m, idx) => (
-                                  <div key={m.id} className="p-3 rounded-xl bg-slate-900 border border-slate-800 space-y-2">
-                                    <div className="text-[10px] font-black uppercase tracking-wider text-white flex items-center gap-2">
-                                      {idx === 0 ? (
-                                        <span className="px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800">Team Leader</span>
-                                      ) : (
-                                        <span className="px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">Participant {idx + 1}</span>
-                                      )}
-                                    </div>
-                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                                      <div>
-                                        <span className="text-slate-500 font-bold block">Full Name</span>
-                                        <span className="text-white font-bold">{m.fullName || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-500 font-bold block">Department</span>
-                                        <span className="text-slate-300">{m.department || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-500 font-bold block">Semester</span>
-                                        <span className="text-slate-300">{m.semester || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-500 font-bold block">Email</span>
-                                        <span className="text-slate-300">{m.email || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-500 font-bold block">Phone</span>
-                                        <span className="text-slate-300">{m.phone || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-500 font-bold block">Gender</span>
-                                        <span className="text-slate-300">{m.gender || '—'}</span>
-                                      </div>
-                                      <div>
-                                        <span className="text-slate-500 font-bold block">College ID Card</span>
-                                        <span className="text-slate-300 font-mono">{m.usn || '—'}</span>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
+                          <td className="p-3">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleVerifyUTR(t.id, 'Verified')}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]"
+                              >
+                                Approve
+                              </button>
+                              <button
+                                onClick={() => handleVerifyUTR(t.id, 'Rejected')}
+                                className="px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-bold text-[10px]"
+                              >
+                                Reject
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setSelectedLedgerTeam(t)}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-950 hover:bg-indigo-900 text-indigo-300 border border-indigo-700/60 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                              >
+                                <Eye className="w-3 h-3" />
+                                View Participants
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
                     </tbody>
+
                   </table>
                 </div>
               </div>
 
+              {selectedLedgerTeam && (
+                <div className="fixed inset-0 z-[120] flex justify-end" role="dialog" aria-modal="true" aria-label={`Participant details for ${selectedLedgerTeam.teamName}`}>
+                  <button
+                    type="button"
+                    className="absolute inset-0 bg-black/80 backdrop-blur-md animate-fadeIn"
+                    aria-label="Close participant details"
+                    onClick={() => setSelectedLedgerTeam(null)}
+                  />
+                  <aside className="relative w-full max-w-md h-full bg-slate-900 border-l border-slate-700 shadow-2xl flex flex-col animate-fadeIn">
+                    <header className="shrink-0 p-5 border-b border-slate-800 bg-slate-950/70">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0">
+                          <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-cyan-400">Participant Details</span>
+                          <h3 className="mt-1 text-lg font-black text-white truncate">{selectedLedgerTeam.teamName}</h3>
+                          <p className="text-[11px] font-mono text-slate-400">Team ID: {selectedLedgerTeam.id}</p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedLedgerTeam(null)}
+                          className="shrink-0 p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
+                          aria-label="Close participant details"
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </header>
+
+                    <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                      {selectedLedgerTeam.members.map((member, index) => {
+                        const collegeIdImage = selectedLedgerTeam.collegeIdImages?.[index === 0 ? 'leader' : `p${index + 1}`];
+                        return (
+                          <section key={member.id} className="rounded-2xl bg-slate-950 border border-slate-800 p-4 space-y-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <h4 className="text-[11px] font-black uppercase tracking-wider text-white">
+                                {index === 0 ? 'Team Leader' : `Participant ${index + 1}`}
+                              </h4>
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-bold border ${
+                                index === 0 ? 'bg-amber-950 text-amber-300 border-amber-800' : 'bg-slate-800 text-slate-300 border-slate-700'
+                              }`}>
+                                {member.role}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2.5 text-xs">
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-500 font-bold shrink-0">Name</span>
+                                <span className="text-white font-bold text-right break-words">{member.fullName || '—'}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-500 font-bold shrink-0">Department</span>
+                                <span className="text-slate-300 text-right break-words">{member.department || '—'}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-500 font-bold shrink-0">Semester</span>
+                                <span className="text-slate-300 text-right">{member.semester || '—'}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-500 font-bold shrink-0">Email</span>
+                                <span className="text-slate-300 text-right break-all">{member.email || '—'}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-500 font-bold shrink-0">Phone</span>
+                                <span className="text-slate-300 text-right">{member.phone || '—'}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-500 font-bold shrink-0">Gender</span>
+                                <span className="text-slate-300 text-right">{member.gender || '—'}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-500 font-bold shrink-0">College</span>
+                                <span className="text-slate-300 text-right break-words">{member.college || '—'}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-500 font-bold shrink-0">State</span>
+                                <span className="text-slate-300 text-right">{member.state || '—'}</span>
+                              </div>
+                              <div className="flex items-start justify-between gap-4">
+                                <span className="text-slate-500 font-bold shrink-0">College ID</span>
+                                <span className="text-right">
+                                  {collegeIdImage ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedCollegeIdImage({ src: collegeIdImage, label: `${member.fullName || 'Participant'} College ID` })}
+                                      className="text-cyan-300 hover:text-cyan-200 font-bold underline underline-offset-2"
+                                    >
+                                      View
+                                    </button>
+                                  ) : (
+                                    <span className="text-slate-300 font-mono break-all">{member.usn || '—'}</span>
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </section>
+                        );
+                      })}
+                    </div>
+                  </aside>
+                </div>
+              )}
+
+              {selectedCollegeIdImage && (() => {
+                const isCollegeIdUrl = /^https?:\/\//i.test(selectedCollegeIdImage.src);
+                return (
+                  <div className="fixed inset-0 z-[130] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn" onClick={() => setSelectedCollegeIdImage(null)}>
+                    <div className="bg-slate-900 border border-indigo-500/40 rounded-2xl p-4 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider">{selectedCollegeIdImage.label}</h4>
+                        <button type="button" onClick={() => setSelectedCollegeIdImage(null)} className="text-slate-400 hover:text-white text-lg leading-none" aria-label="Close college ID preview">×</button>
+                      </div>
+                      {isCollegeIdUrl ? (
+                        <div className="space-y-3">
+                          <p className="text-[11px] text-slate-400 break-all">College ID is available at this link:</p>
+                          <a href={selectedCollegeIdImage.src} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-indigo-300 break-all hover:underline">{selectedCollegeIdImage.src}</a>
+                          <a href={selectedCollegeIdImage.src} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs">
+                            <Globe className="w-4 h-4" /> Open College ID
+                          </a>
+                        </div>
+                      ) : (
+                        <img src={selectedCollegeIdImage.src} alt={selectedCollegeIdImage.label} className="w-full max-h-[70vh] object-contain rounded-xl border border-slate-700 bg-slate-950" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
+
               {/* Payment Screenshot Preview Modal */}
-              {screenshotPreview && (
+              {(() => {
+                const isProofUrl = !!screenshotPreview && /^https?:\/\//i.test(screenshotPreview);
+                return screenshotPreview && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn" onClick={() => setScreenshotPreview(null)}>
                   <div className="bg-slate-900 border border-indigo-500/40 rounded-2xl p-4 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider">Payment Proof Screenshot</h4>
+                      <h4 className="text-xs font-black text-slate-200 uppercase tracking-wider">Payment Proof</h4>
                       <button type="button" onClick={() => setScreenshotPreview(null)} className="text-slate-400 hover:text-white text-lg leading-none">×</button>
                     </div>
-                    <img src={screenshotPreview} alt="Payment Proof" className="w-full max-h-[70vh] object-contain rounded-xl border border-slate-700 bg-slate-950" />
+                    {isProofUrl ? (
+                      <div className="space-y-3">
+                        <p className="text-[11px] text-slate-400 break-all">Payment proof is a Google Drive URL:</p>
+                        <a href={screenshotPreview} target="_blank" rel="noopener noreferrer" className="block text-[11px] text-indigo-300 break-all hover:underline">{screenshotPreview}</a>
+                        <a href={screenshotPreview} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs">
+                          <Globe className="w-4 h-4" /> Open Proof in Google Drive
+                        </a>
+                      </div>
+                    ) : (
+                      <img src={screenshotPreview} alt="Payment Proof" className="w-full max-h-[70vh] object-contain rounded-xl border border-slate-700 bg-slate-950" />
+                    )}
                   </div>
                 </div>
-              )}
+              );})()}
             </div>
           )}
 
@@ -4339,14 +4605,14 @@ export const AdminPortal: React.FC = () => {
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-xs text-slate-300">
                     <FileText className="w-4 h-4 text-emerald-400" />
-                    <span>CSV selected. Click <strong className="text-white">Parse &amp; Validate</strong> to check the file.</span>
+                    <span>XLSX selected. Click <strong className="text-white">Parse &amp; Validate</strong> to check the file.</span>
                   </div>
                   <button
-                    onClick={handleCsvValidate}
-                    disabled={csvValidating}
+                    onClick={handleXlsxValidate}
+                    disabled={xlsxValidating}
                     className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-xs flex items-center gap-2 shadow-lg disabled:opacity-50"
                   >
-                    {csvValidating ? 'Validating...' : 'Parse & Validate'}
+                    {xlsxValidating ? 'Validating...' : 'Parse & Validate'}
                   </button>
                 </div>
               )}
@@ -4423,7 +4689,7 @@ export const AdminPortal: React.FC = () => {
                   {csvImportModal.preview.every(p => p.status === 'Valid') && (
                     <div className="flex items-center gap-2 pt-2">
                       <button
-                        onClick={handleCsvImport}
+                        onClick={handleXlsxImport}
                         disabled={csvImportModal.importing}
                         className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-emerald-500 hover:from-emerald-500 hover:to-emerald-400 text-white font-bold text-xs flex items-center gap-2 shadow-lg disabled:opacity-50"
                       >

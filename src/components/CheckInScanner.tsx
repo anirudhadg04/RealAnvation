@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Team, Participant } from '../types';
-import { QrCode, Camera, CheckCircle2, AlertCircle, RefreshCw, Sparkles, ShieldCheck, MapPin, Users, Ticket, Phone, Mail, Award, Search, UserCheck, XCircle, ArrowRight, Clock } from 'lucide-react';
+import { QrCode, Camera, CheckCircle2, AlertCircle, RefreshCw, Sparkles, ShieldCheck, Users, Ticket, Phone, Mail, Award, Search, UserCheck, XCircle, ArrowRight, Clock } from 'lucide-react';
 import { PhonePeQRCode } from './PhonePeQRCode';
 
 interface CheckInScannerProps {
@@ -14,10 +14,11 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
   const [cameraPermission, setCameraPermission] = useState<'prompt' | 'granted' | 'denied' | 'unsupported'>('prompt');
   const [cameraError, setCameraError] = useState<string>('');
   
-  const [scannedTeam, setScannedTeam] = useState<Team | null>(teams[0] || null);
+  const [scannedTeam, setScannedTeam] = useState<Team | null>(null);
+  const [verifiedPayment, setVerifiedPayment] = useState<{ amount: number; utr: string; status: string } | null>(null);
+  const [scanning, setScanning] = useState<boolean>(false);
   const [manualInput, setManualInput] = useState<string>('');
   const [scanMessage, setScanMessage] = useState<{ type: 'success' | 'info' | 'error'; text: string } | null>(null);
-  const [assignedDesk, setAssignedDesk] = useState<string>('Desk A-14');
   const [filterStatus, setFilterStatus] = useState<'all' | 'checked-in' | 'pending'>('all');
 
   // Check camera availability
@@ -64,35 +65,74 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
     };
   }, []);
 
-  // Simulate scanning a QR payload (e.g. team ID or reg number)
-  const processQrScan = (qrCodeString: string) => {
+  // Scan/enter a Team ID (QR payload). The QR identifies the Team ID only; the
+  // backend/database is the authority for the Team, its approval status and payment
+  // details. Payment info is never trusted from the QR code or from frontend data.
+  const processQrScan = async (qrCodeString: string) => {
     const trimmed = qrCodeString.trim();
     if (!trimmed) return;
 
-    // Search for matching team by id, regNumber, or leader email or member USN
-    const match = teams.find(t => 
-      t.id.toLowerCase() === trimmed.toLowerCase() ||
-      (t.regNumber || '').toLowerCase() === trimmed.toLowerCase() ||
-      t.leaderEmail.toLowerCase() === trimmed.toLowerCase() ||
-      t.members.some(m => m.usn.toLowerCase() === trimmed.toLowerCase() || m.email.toLowerCase() === trimmed.toLowerCase())
-    );
+    setScanning(true);
+    setVerifiedPayment(null);
 
-    if (match) {
-      setScannedTeam(match);
-      setScanMessage({ 
-        type: 'success', 
-        text: `QR Verified! Found Team: ${match.teamName} (${match.id})` 
+    try {
+      const res = await fetch(`/api/teams/${encodeURIComponent(trimmed)}`);
+      const data = res.ok ? await res.json().catch(() => null) : null;
+
+      if (!res.ok || !data?.team) {
+        setScannedTeam(null);
+        setScanMessage({
+          type: 'error',
+          text: `No registered team found matching QR code "${trimmed}".`
+        });
+        return;
+      }
+
+      const team: Team = data.team;
+      setScannedTeam(team);
+
+      if (team.approvalStatus !== 'APPROVED') {
+        setScanMessage({
+          type: 'error',
+          text: `Team ${team.teamName} (${team.id}) is not approved for entry (approvalStatus: ${team.approvalStatus || 'PENDING'}). Gate entry denied.`
+        });
+        return;
+      }
+
+      setVerifiedPayment({
+        amount: data.paymentAmount || 0,
+        utr: team.paymentUtr || '',
+        status: team.paymentStatus || 'Verified'
       });
-    } else {
-      setScanMessage({ 
-        type: 'error', 
-        text: `No registered team found matching QR code "${trimmed}".` 
+      setScanMessage({
+        type: 'success',
+        text: `QR Verified! Found Team: ${team.teamName} (${team.id}) — APPROVED. Payment & UTR confirmed from backend record.`
       });
+    } catch (err: any) {
+      console.error('Scan verification error:', err);
+      setScannedTeam(null);
+      setVerifiedPayment(null);
+      setScanMessage({
+        type: 'error',
+        text: 'Verification failed. Could not reach the backend to confirm the team record.'
+      });
+    } finally {
+      setScanning(false);
     }
   };
 
   // Confirm check-in action
   const handleCheckInTeam = async (team: Team) => {
+    // The backend/database is authoritative for approval status: never admit a
+    // team that has not been approved, even if the UI was manipulated.
+    if (team.approvalStatus !== 'APPROVED') {
+      setScanMessage({
+        type: 'error',
+        text: `🚫 Entry denied: Team ${team.teamName} (${team.id}) is not APPROVED (approvalStatus: ${team.approvalStatus || 'PENDING'}).`
+      });
+      return;
+    }
+
     const updatedMembers = team.members.map(m => ({
       ...m,
       checkedIn: true,
@@ -116,18 +156,34 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
     setScannedTeam(updatedTeam);
 
     try {
-      await fetch(`/api/teams/${team.id}/check-in`, {
+      const res = await fetch(`/api/teams/${team.id}/check-in`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        setScanMessage({
+          type: 'error',
+          text: errData.error || `Gate check-in rejected for ${team.teamName} (${team.id}).`
+        });
+        return;
+      }
+
+      const data = await res.json();
+      if (data?.team) setScannedTeam(data.team);
+
+      setScanMessage({
+        type: 'success',
+        text: `🎉 Gate Pass Verified! ${team.teamName} (${team.id}) admitted to venue. Entry gate pass confirmed!`
+      });
     } catch (err) {
       console.error("Server check-in error:", err);
+      setScanMessage({
+        type: 'error',
+        text: `Could not reach the backend to confirm check-in for ${team.teamName} (${team.id}).`
+      });
     }
-
-    setScanMessage({
-      type: 'success',
-      text: `🎉 Gate Pass Verified! ${team.teamName} (${team.id}) admitted to venue. Entry gate pass confirmed!`
-    });
   };
 
   // Toggle single member check-in
@@ -292,13 +348,14 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
                   placeholder="e.g. AN-001 or akash.m@gmail.com"
                   className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-medium focus:outline-none focus:border-cyan-500"
                 />
-                <button
-                  type="button"
-                  onClick={() => processQrScan(manualInput)}
-                  className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all shadow"
-                >
-                  Verify QR
-                </button>
+                 <button
+                   type="button"
+                   disabled={scanning}
+                   onClick={() => processQrScan(manualInput)}
+                   className="px-4 py-2.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all shadow disabled:opacity-50 disabled:cursor-not-allowed"
+                 >
+                   {scanning ? 'Verifying…' : 'Verify QR'}
+                 </button>
               </div>
             </div>
 
@@ -381,29 +438,18 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
                 </div>
               </div>
 
-              {/* Desk Allocation & Quick Actions */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-                  <div className="text-xs font-bold text-slate-400">Assigned Hackathon Desk Zone:</div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-cyan-400" />
-                    <input
-                      type="text"
-                      value={assignedDesk}
-                      onChange={(e) => setAssignedDesk(e.target.value)}
-                      className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1 text-xs font-extrabold text-cyan-300 focus:outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
-                  <div className="text-xs font-bold text-slate-400">Payment & Verification:</div>
-                  <div className="flex items-center justify-between text-xs font-bold">
-                    <span className="text-slate-300">PhonePe ₹300 UTR:</span>
-                    <span className="text-emerald-400 font-mono">{scannedTeam.paymentUtr || '428901239855'}</span>
-                  </div>
-                </div>
-              </div>
+               {/* Payment & Verification (sourced from the authoritative backend record, never from the QR code) */}
+               <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-1.5">
+                 <div className="text-xs font-bold text-slate-400">Payment & Verification:</div>
+                 {verifiedPayment ? (
+                   <>
+                     <div className="text-xs font-bold text-slate-300">Paid ₹{verifiedPayment.amount}</div>
+                     <div className="text-xs font-mono text-emerald-400 break-all">UTR: {verifiedPayment.utr || 'Not available'}</div>
+                   </>
+                 ) : (
+                   <div className="text-xs text-slate-400">Payment & UTR are verified from the backend record once the team is approved.</div>
+                 )}
+               </div>
 
               {/* Members List with Individual Check-In Toggles */}
               <div className="space-y-3">
@@ -560,10 +606,7 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
                     </td>
                     <td className="p-3 text-right">
                       <button
-                        onClick={() => {
-                          setScannedTeam(t);
-                          setScanMessage({ type: 'info', text: `Loaded team ${t.teamName} (${t.id})` });
-                        }}
+                        onClick={() => processQrScan(t.id)}
                         className="px-3 py-1 rounded-lg bg-slate-800 hover:bg-cyan-950 hover:text-cyan-300 hover:border-cyan-700 border border-slate-700 font-bold text-xs transition-all inline-flex items-center gap-1"
                       >
                         <span>Scan / View</span>

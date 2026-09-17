@@ -1471,14 +1471,46 @@ export async function startServer(options: { listen?: boolean } = {}) {
       teams: safeTeams,
       freezeRegistrations: !!cmsConfig.freezeRegistrations,
       registrationOpen: cmsConfig.registrationOpen && !cmsConfig.freezeRegistrations,
-      stats: {
-        registeredCount: totalParticipants,
-        collegesCount: uniqueColleges,
-        seatsLeft,
-        totalSeats: totalCapacity,
-        totalTeams: teams.length
-      }
+         stats: {
+          registeredCount: totalParticipants,
+          collegesCount: uniqueColleges,
+          seatsLeft,
+          totalSeats: totalCapacity,
+          totalTeams: teams.length
+        }
     });
+  });
+
+  // Look up the canonical Team record for gate scanning. The backend/database is the
+  // single source of truth for the Team, its approval status and payment details — the
+  // QR payload is only trusted as a Team ID and must never carry payment information.
+  app.get("/api/teams/:id", (req, res) => {
+    try {
+      const { id } = req.params;
+      const team = teams.find(t =>
+        t.id.toLowerCase() === id.toLowerCase() ||
+        (t.regNumber || '').toLowerCase() === id.toLowerCase() ||
+        t.leaderEmail.toLowerCase() === id.toLowerCase()
+      );
+
+      if (!team) {
+        return res.status(404).json({ success: false, error: `Team with ID "${id}" not found.` });
+      }
+
+      const safeTeam = sanitizeTeamForClient(team);
+      const paymentAmount = (safeTeam.members || []).length * (cmsConfig.registrationFee || 0);
+
+      res.json({
+        success: true,
+        team: safeTeam,
+        paymentAmount,
+        paymentUtr: safeTeam.paymentUtr || '',
+        paymentStatus: safeTeam.paymentStatus,
+        approvalStatus: safeTeam.approvalStatus
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err.message });
+    }
   });
 
   // Return only the current session identity so the client can gate the admin view.
@@ -1505,6 +1537,18 @@ export async function startServer(options: { listen?: boolean } = {}) {
       }
 
       const team = teams[index];
+
+      // The backend/database is authoritative for approval status: only APPROVED teams
+      // may be admitted to the venue, regardless of what the scanner UI displays.
+      if (team.approvalStatus !== 'APPROVED') {
+        return res.status(403).json({
+          success: false,
+          error: `Team ${team.id} is not approved for venue entry (approvalStatus: ${team.approvalStatus || 'PENDING'}).`,
+          team: sanitizeTeamForClient(team),
+          approvalStatus: team.approvalStatus
+        });
+      }
+
       const entryTime = new Date().toISOString();
       team.status = 'Checked-In';
       team.members = team.members.map(m => ({
@@ -3614,21 +3658,37 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     res.json({ success: true, team });
   });
 
-  // CSV Import Endpoint
+  // CSV / XLSX Import Endpoint
   app.post("/api/admin/import-csv", requireAdmin, async (req, res) => {
     try {
-      const { csvContent, confirm } = req.body;
-      if (!csvContent || typeof csvContent !== "string" || csvContent.trim() === "") {
-        return res.status(400).json({ success: false, error: "CSV content is required." });
+      const body = req.body || {};
+      const { confirm } = body;
+
+      let headers: string[];
+      let dataRows: string[][];
+      let rowImages: Record<string, string>[] = [];
+
+      if (Array.isArray(body.rows) && body.fieldMap) {
+        // XLSX payload (rows + fieldMap + per-row embedded images)
+        headers = body.headers || [];
+        dataRows = body.rows;
+        rowImages = body.images || [];
+      } else {
+        const csvContent = body.csvContent;
+        if (!csvContent || typeof csvContent !== "string" || csvContent.trim() === "") {
+          return res.status(400).json({ success: false, error: "CSV content is required." });
+        }
+        const lines = csvContent.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line: string) => line.trim().length > 0);
+        if (lines.length < 2) {
+          return res.status(400).json({ success: false, error: "CSV must have a header row and at least one data row." });
+        }
+        headers = parseCsvLine(lines[0]).map((h: string) => h.trim().toLowerCase());
+        dataRows = lines.slice(1).map(parseCsvLine);
       }
 
-      const lines = csvContent.replace(/^\uFEFF/, "").split(/\r?\n/).filter((line: string) => line.trim().length > 0);
-      if (lines.length < 2) {
-        return res.status(400).json({ success: false, error: "CSV must have a header row and at least one data row." });
+      if (dataRows.length === 0) {
+        return res.status(400).json({ success: false, error: "No data rows found in the workbook." });
       }
-
-      const headers = parseCsvLine(lines[0]).map((h: string) => h.trim().toLowerCase());
-      const dataRows = lines.slice(1).map(parseCsvLine);
 
       const requiredColumns: Record<string, string[]> = {
         team_name: ["team name"],
@@ -3672,13 +3732,21 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         payment_confirmation: ["payment confirmation"]
       };
 
-      const fieldMap: Record<string, number> = {};
-      for (const [key, aliases] of Object.entries(requiredColumns)) {
-        const idx = aliases.findIndex(alias => headers.includes(alias));
-        if (idx === -1) {
-          return res.status(400).json({ success: false, error: `Missing required column: "${aliases[0]}". Found columns: ${headers.join(", ")}` });
+      const fieldMap: Record<string, number> = body.fieldMap || {};
+      if (!body.fieldMap) {
+        for (const [key, aliases] of Object.entries(requiredColumns)) {
+          const idx = aliases.findIndex(alias => headers.includes(alias));
+          if (idx === -1) {
+            return res.status(400).json({ success: false, error: `Missing required column: "${aliases[0]}". Found columns: ${headers.join(", ")}` });
+          }
+          fieldMap[key] = idx;
         }
-        fieldMap[key] = idx;
+      } else {
+        for (const [key, aliases] of Object.entries(requiredColumns)) {
+          if (fieldMap[key] === undefined || fieldMap[key] < 0) {
+            return res.status(400).json({ success: false, error: `Missing required column: "${aliases[0]}".` });
+          }
+        }
       }
 
       interface PreviewRow {
@@ -3742,8 +3810,23 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         const p4Gender = (row[fieldMap["p4_gender"]] || "").trim();
         const p4CollegeId = (row[fieldMap["p4_college_id"]] || "").trim();
         const utr = (row[fieldMap["utr"]] || "").trim();
-        const paymentSlip = (row[fieldMap["payment_screenshot"]] || "").trim();
+        const cellPaymentSlip = (row[fieldMap["payment_screenshot"]] || "").trim();
         const paymentConfirmation = (row[fieldMap["payment_confirmation"]] || "").trim();
+
+        const rowImgs = rowImages[i] || {};
+        const resolveProof = (colIdx: number): string => {
+          const img = rowImgs[`col_${colIdx + 1}`];
+          if (img) return img;
+          const cellVal = String(row[colIdx] || '').trim();
+          if (/^https?:\/\//i.test(cellVal)) return cellVal;
+          return '';
+        };
+
+        const paymentSlip = resolveProof(fieldMap["payment_screenshot"]) || cellPaymentSlip;
+        const leaderCollegeIdImg = resolveProof(fieldMap["leader_college_id"]);
+        const p2CollegeIdImg = resolveProof(fieldMap["p2_college_id"]);
+        const p3CollegeIdImg = resolveProof(fieldMap["p3_college_id"]);
+        const p4CollegeIdImg = resolveProof(fieldMap["p4_college_id"]);
 
         const numTeammates = parseInt(numTeammatesStr, 10);
         const cleanLeaderPhone = leaderPhone.replace(/[^0-9]/g, "");
@@ -3857,7 +3940,8 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
             p2FullName, p2Department, p2Semester, p2Email, p2Phone, p2Gender, p2CollegeId,
             p3FullName, p3Department, p3Semester, p3Email, p3Phone, p3Gender, p3CollegeId,
             p4FullName, p4Department, p4Semester, p4Email, p4Phone, p4Gender, p4CollegeId,
-            utr: cleanUtr, paymentSlip, paymentConfirmation
+            utr: cleanUtr, paymentSlip, paymentConfirmation,
+            leaderCollegeIdImg, p2CollegeIdImg, p3CollegeIdImg, p4CollegeIdImg
           }
         });
       }
@@ -3999,6 +4083,12 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           paymentStatus: 'PENDING_PAYMENT_AUDIT' as any,
           paymentAmountDetail: `Pending admin payment audit for ${cmsConfig.registrationFee || 250} INR`,
           paymentScreenshot: rd.paymentSlip || null,
+          collegeIdImages: {
+            leader: rd.leaderCollegeIdImg || null,
+            p2: rd.p2CollegeIdImg || null,
+            p3: rd.p3CollegeIdImg || null,
+            p4: rd.p4CollegeIdImg || null
+          },
           credentialDeliveryStatus: 'queued',
           approvalStatus: 'PENDING',
           approvalTimestamp: '',

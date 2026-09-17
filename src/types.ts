@@ -49,6 +49,7 @@ export interface Team {
   approvalEmailSentAt?: string;
   approvalReason?: string;
   paymentAuditTimestamp?: string;
+  collegeIdImages?: Record<string, string>;
 }
 
 export interface ProjectSubmission {
