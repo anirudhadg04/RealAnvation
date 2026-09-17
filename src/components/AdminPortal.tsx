@@ -292,7 +292,20 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   const [emailBody, setEmailBody] = useState('');
 
   useEffect(() => {
-    fetchAdminData();
+    const checkSession = async () => {
+      try {
+        const res = await fetch('/api/session');
+        const data = await res.json();
+        if (data.authenticated && data.user?.type === 'admin') {
+          setIsAuthenticated(true);
+          setAdminEmail(data.user.email || '');
+        }
+      } catch {
+        // ignore session check errors
+      }
+      fetchAdminData();
+    };
+    checkSession();
   }, []);
 
   const fetchAdminData = async () => {

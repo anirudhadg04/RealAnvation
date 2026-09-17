@@ -17,7 +17,7 @@ import { SEED_ANNOUNCEMENTS, SPONSORS } from "./src/data/mockData";
 import { Team, ProjectSubmission, JudgeScorecard, Announcement, SupportTicket, Participant, MilestoneReport, MentorBooking, WebsiteCMSConfig, AuditLog, AdminUser, AdminRole, RulebookVersion, EmailCampaign, RoomAllocation, JudgingRound, ScheduleItem, Checkpoint, Sponsor } from "./src/types";
 import { HACKATHON_TRACKS } from "./src/data/mockData";
 import { PAYMENT_UPI_ID, ocrContainsTransactionId } from "./src/utils/upiVerification";
-import { ensureProductionSchema, findProductionDuplicate, loadProductionTeams, productionStoreEnabled, saveProductionTeam, updateProductionTeam, deleteProductionTeam, getProductionTeam, updateProductionTeamAudit } from "./src/server/productionStore";
+import { ensureProductionSchema, findProductionDuplicate, loadProductionTeams, productionStoreEnabled, saveProductionTeam, updateProductionTeam, deleteProductionTeam, getProductionTeam, updateProductionTeamAudit, saveQrToken, invalidateQrToken, verifyQrToken, checkInTeam } from "./src/server/productionStore";
 import { resolveAdminBootstrapPassword } from "./src/utils/adminAuth";
 
 const execFileAsync = promisify(execFile);
@@ -417,13 +417,33 @@ export async function startServer(options: { listen?: boolean } = {}) {
 
   const AUTH_COOKIE = "anvation_session";
   const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+  const SESSION_SECRET = process.env.SESSION_SECRET || "default-secret-change-in-production";
   const DEFAULT_ADMIN_PASSWORD = resolveAdminBootstrapPassword(process.env);
   if (process.env.VERCEL && !process.env.ADMIN_BOOTSTRAP_PASSWORD) {
     console.warn("[AUTH] ADMIN_BOOTSTRAP_PASSWORD missing in Vercel; using built-in fallback to keep admin login active.");
   }
-  const sessionStore = new Map<string, { user: { id: string; type: "admin" | "participant"; role?: string; email?: string; username?: string; name?: string; teamId?: string; expiresAt: number; }; expiresAt: number }>();
   const passwordResetTokens = new Map<string, { teamId: string; expiresAt: number }>();
   const PASSWORD_RESET_TTL_MS = 15 * 60 * 1000;
+
+  function signSession(data: any): string {
+    const payload = Buffer.from(JSON.stringify(data)).toString("base64url");
+    const signature = crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
+    return `${payload}.${signature}`;
+  }
+
+  function verifySession(token: string): any | null {
+    try {
+      const [payload, signature] = token.split(".");
+      if (!payload || !signature) return null;
+      const expectedSignature = crypto.createHmac("sha256", SESSION_SECRET).update(payload).digest("base64url");
+      if (signature !== expectedSignature) return null;
+      const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+      if (Date.now() > data.expiresAt) return null;
+      return data;
+    } catch {
+      return null;
+    }
+  }
 
   function sanitizeAdminUser(user: Partial<AdminUser> | null | undefined) {
     if (!user) return user;
@@ -478,23 +498,17 @@ export async function startServer(options: { listen?: boolean } = {}) {
   }
 
   function createSession(user: any) {
-    const sid = crypto.randomBytes(24).toString("hex");
     const record = { user: { ...user, expiresAt: Date.now() + SESSION_TTL_MS }, expiresAt: Date.now() + SESSION_TTL_MS };
-    sessionStore.set(sid, record);
-    return sid;
+    return signSession(record);
   }
 
   function getSessionFromRequest(req: any) {
     const cookieRaw = req.headers.cookie || "";
     const match = cookieRaw.split(";").map((v: string) => v.trim()).find((v: string) => v.startsWith(`${AUTH_COOKIE}=`));
-    const sid = match ? decodeURIComponent(match.slice(AUTH_COOKIE.length + 1)) : null;
-    if (!sid) return null;
-    const session = sessionStore.get(sid);
+    const token = match ? decodeURIComponent(match.slice(AUTH_COOKIE.length + 1)) : null;
+    if (!token) return null;
+    const session = verifySession(token);
     if (!session) return null;
-    if (Date.now() > session.expiresAt) {
-      sessionStore.delete(sid);
-      return null;
-    }
     return session;
   }
 
@@ -1401,36 +1415,37 @@ export async function startServer(options: { listen?: boolean } = {}) {
     });
   }
 
-  async function sendApprovalEmail(team: Team): Promise<void> {
-    const smtp = getSmtpConfig();
-    if (!smtp.configured) {
-      console.warn("[EMAIL] SMTP not configured; skipping approval email for team", team.id);
-      return;
-    }
-    const transporter = nodemailer.createTransport({
-      host: String(process.env.SMTP_HOST),
-      port: Number(process.env.SMTP_PORT) || 587,
-      secure: process.env.SMTP_SECURE === "true",
-      auth: { user: String(process.env.SMTP_USER), pass: String(process.env.SMTP_PASS) },
-      tls: { rejectUnauthorized: false },
-      connectionTimeout: 10_000,
-      socketTimeout: 15_000,
-    });
-    const from = String(process.env.MAIL_FROM || process.env.SMTP_USER);
-    const recipients = team.members.map((m) => m.email).filter(Boolean);
-    const password = String(team.portalPasswordPlain || team.accessPassword || '');
-    const subject = `ANVATION 2026 Registration Approved — Team ${team.id}`;
-    const text = `Hello participants,\n\nYour team ${team.teamName} (${team.id}) has been approved by the admin.\n\nPayment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.\n\nPortal password: ${password}\n\nUse Team ID ${team.id} and this password to log in to the participant portal.\n\nTeam details:\n${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}`;
-    const html = `<p>Hello participants,</p><p>Your team <b>${team.teamName}</b> (<b>${team.id}</b>) has been approved by the admin.</p><p><b>Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.</b></p><p><b>Portal password:</b> ${password}</p><p>Use Team ID <b>${team.id}</b> and this password to log in to the participant portal.</p><p>${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}</p>`;
-    try { await transporter.verify(); } catch (verifyErr) { console.warn('[EMAIL] transporter.verify() failed; attempting send anyway', verifyErr); }
-    for (const recipient of recipients) {
-      try {
-        await transporter.sendMail({ from, to: recipient, subject, text, html });
-      } catch (sendErr) {
-        console.error('[EMAIL] Failed to send approval email to', recipient, 'for team', team.id, sendErr);
-      }
-    }
-  }
+   async function sendApprovalEmail(team: Team): Promise<void> {
+     const smtp = getSmtpConfig();
+     if (!smtp.configured) {
+       console.warn("[EMAIL] SMTP not configured; skipping approval email for team", team.id);
+       return;
+     }
+     const transporter = nodemailer.createTransport({
+       host: String(process.env.SMTP_HOST),
+       port: Number(process.env.SMTP_PORT) || 587,
+       secure: process.env.SMTP_SECURE === "true",
+       auth: { user: String(process.env.SMTP_USER), pass: String(process.env.SMTP_PASS) },
+       tls: { rejectUnauthorized: false },
+       connectionTimeout: 10_000,
+       socketTimeout: 15_000,
+     });
+     const from = String(process.env.MAIL_FROM || process.env.SMTP_USER);
+     const password = String(team.portalPasswordPlain || team.accessPassword || '');
+     const participantList = team.members.map((m) => ({ email: m.email, name: m.fullName })).filter(p => p.email);
+     const subject = `Anvation Registration Approved – Team ${team.id}`;
+     const appUrl = String(process.env.PARTICIPANT_PORTAL_URL || process.env.PUBLIC_APP_URL || 'https://real-anvation.vercel.app');
+     const text = `Your Anvation registration has been approved.\n\nTeam ID: ${team.id}\nLogin ID: ${team.id}\nPassword: ${password}\n\nUse these credentials to access the participant portal.\n\nPortal URL: ${appUrl}\n\nTeam details:\n${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}`;
+     const html = `<p>Your Anvation registration has been approved.</p><p><b>Team ID:</b> ${team.id}<br/><b>Login ID:</b> ${team.id}<br/><b>Password:</b> ${password}</p><p>Use these credentials to access the participant portal.</p><p><b>Portal URL:</b> <a href="${appUrl}">${appUrl}</a></p><p>${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}</p>`;
+     try { await transporter.verify(); } catch (verifyErr) { console.warn('[EMAIL] transporter.verify() failed; attempting send anyway', verifyErr); }
+     for (const recipient of participantList) {
+       try {
+         await transporter.sendMail({ from, to: recipient.email, subject, text, html });
+       } catch (sendErr) {
+         console.error('[EMAIL] Failed to send approval email to', recipient.email, 'for team', team.id, sendErr);
+       }
+     }
+   }
 
   // API Routes
   app.get("/api/health", (req, res) => {
@@ -1761,9 +1776,6 @@ export async function startServer(options: { listen?: boolean } = {}) {
         return res.status(500).json({ success: false, error: "The password could not be reset right now." });
       }
       passwordResetTokens.delete(tokenHash);
-      for (const [sessionId, session] of sessionStore.entries()) {
-        if (session.user.type === "participant" && session.user.teamId === team.id) sessionStore.delete(sessionId);
-      }
       auditLogs.unshift({
         id: `log-${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -2385,12 +2397,6 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         return res.status(500).json({ success: false, error: "Password reset could not be persisted." });
       }
 
-      for (const [sessionId, session] of sessionStore.entries()) {
-        if (session.user.type === "participant" && session.user.teamId === previousTeam.id) {
-          sessionStore.delete(sessionId);
-        }
-      }
-
       auditLogs.unshift({
         id: `log-${Date.now()}`,
         timestamp: new Date().toISOString(),
@@ -2416,25 +2422,27 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     }
   });
 
-  // Delete Team Endpoint
-  app.delete("/api/teams/:id", requireSuperAdmin, async (req, res) => {
-    const { id } = req.params;
-    const initialLen = teams.length;
-    teams = teams.filter(t => t.id.toLowerCase() !== id.toLowerCase() && (t.regNumber || '').toLowerCase() !== id.toLowerCase());
-    if (teams.length === initialLen) {
-      return res.status(404).json({ success: false, error: "Team not found" });
-    }
-    if (productionStoreEnabled) {
-      try { await deleteProductionTeam(id); }
-      catch (e) {
-        console.error('[DELETE] productionStore delete failed:', e);
-        return res.status(500).json({ success: false, error: 'Failed to delete team from database. Please try again or contact support.' });
-      }
-    }
-    rebuildUniquenessIndexes();
-    res.json({ success: true, message: "Team deleted successfully" });
-    markDirty();
-  });
+   // Delete Team Endpoint
+   app.delete("/api/teams/:id", requireSuperAdmin, async (req, res) => {
+     const { id } = req.params;
+     const initialLen = teams.length;
+     teams = teams.filter(t => t.id.toLowerCase() !== id.toLowerCase() && (t.regNumber || '').toLowerCase() !== id.toLowerCase());
+     if (teams.length === initialLen) {
+       return res.status(404).json({ success: false, error: "Team not found" });
+     }
+     if (productionStoreEnabled) {
+       try {
+         await invalidateQrToken(id);
+         await deleteProductionTeam(id);
+       } catch (e) {
+         console.error('[DELETE] productionStore delete failed:', e);
+         return res.status(500).json({ success: false, error: 'Failed to delete team from database. Please try again or contact support.' });
+       }
+     }
+     rebuildUniquenessIndexes();
+     res.json({ success: true, message: "Team deleted successfully" });
+     markDirty();
+   });
 
   // Edit / Update Individual Participant Endpoint
   app.put("/api/participants/:id", requireAdmin, (req, res) => {
@@ -2461,30 +2469,139 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     }
   });
 
-  // QR Check-In
-  app.post("/api/checkin", requireAdmin, (req, res) => {
-    const { query } = req.body; // Team ID or USN or Email
-    if (!query) return res.status(400).json({ success: false, error: "Query required" });
+   // QR Check-In
+   app.post("/api/checkin", requireAdmin, (req, res) => {
+     const { query } = req.body; // Team ID or USN or Email
+     if (!query) return res.status(400).json({ success: false, error: "Query required" });
 
-    const cleanQuery = query.trim().toUpperCase();
-    const team = teams.find(t => 
-      t.id.toUpperCase() === cleanQuery ||
-      (t.regNumber || '').toUpperCase() === cleanQuery ||
-      t.members.some(m => m.usn.toUpperCase() === cleanQuery || m.email.toUpperCase() === cleanQuery)
-    );
+     const cleanQuery = query.trim().toUpperCase();
+     const team = teams.find(t =>
+       t.id.toUpperCase() === cleanQuery ||
+       (t.regNumber || '').toUpperCase() === cleanQuery ||
+       t.members.some(m => m.usn.toUpperCase() === cleanQuery || m.email.toUpperCase() === cleanQuery)
+     );
 
-    if (!team) {
-      return res.status(404).json({ success: false, error: "Participant or Team not found" });
-    }
+     if (!team) {
+       return res.status(404).json({ success: false, error: "Participant or Team not found" });
+     }
 
-    team.status = 'Checked-In';
-    team.members.forEach(m => {
-      m.checkedIn = true;
-      m.checkInTime = new Date().toISOString();
-    });
+     team.status = 'Checked-In';
+     team.members.forEach(m => {
+       m.checkedIn = true;
+       m.checkInTime = new Date().toISOString();
+     });
 
-    res.json({ success: true, team, message: `Team ${team.teamName} successfully checked in at KSSEM venue!` });
-  });
+     res.json({ success: true, team, message: `Team ${team.teamName} successfully checked in at KSSEM venue!` });
+   });
+
+   // KSSEM Gate: Verify QR token and return Team ID (server derives Team ID from token, never trusts QR payload)
+   app.post("/api/gate/verify", async (req, res) => {
+     try {
+       const { token } = req.body;
+       if (!token || typeof token !== 'string' || token.trim().length === 0) {
+         return res.status(400).json({ success: false, error: "QR token is required." });
+       }
+       const cleanToken = token.trim();
+
+       // Try production store first, then in-memory
+       let result: { teamId: string; teamJson: any } | null = null;
+       if (productionStoreEnabled) {
+         try { result = await verifyQrToken(cleanToken); } catch (e) { console.error('[GATE] Production store verify failed:', e); }
+       }
+       if (!result) {
+         const tokenHash = crypto.createHash('sha256').update(cleanToken).digest('hex');
+         const team = teams.find(t => t.qrTokenHash === tokenHash);
+         if (team) result = { teamId: team.id, teamJson: team };
+       }
+
+       if (!result) {
+         return res.status(404).json({ success: false, error: "Invalid or expired QR token." });
+       }
+
+       const team = result.teamJson as Team;
+       if (team.approvalStatus !== 'APPROVED') {
+         return res.status(403).json({ success: false, error: `Team ${team.id} is not approved for entry (approvalStatus: ${team.approvalStatus || 'PENDING'}).` });
+       }
+
+       res.json({
+         success: true,
+         teamId: team.id,
+         teamName: team.teamName,
+         approvalStatus: team.approvalStatus,
+         message: `Registration verified for Team ${team.id}.`
+       });
+     } catch (err: any) {
+       res.status(500).json({ success: false, error: "Gate verification failed." });
+     }
+   });
+
+   // KSSEM Gate: One-time check-in using QR token
+   app.post("/api/gate/check-in", requireAdmin, async (req, res) => {
+     try {
+       const { token, checkedInBy } = req.body;
+       if (!token || typeof token !== 'string' || token.trim().length === 0) {
+         return res.status(400).json({ success: false, error: "QR token is required." });
+       }
+       const cleanToken = token.trim();
+
+       let result: { teamId: string; teamJson: any } | null = null;
+       if (productionStoreEnabled) {
+         try { result = await verifyQrToken(cleanToken); } catch (e) { console.error('[GATE] Production store verify failed:', e); }
+       }
+       if (!result) {
+         const tokenHash = crypto.createHash('sha256').update(cleanToken).digest('hex');
+         const team = teams.find(t => t.qrTokenHash === tokenHash);
+         if (team) result = { teamId: team.id, teamJson: team };
+       }
+
+       if (!result) {
+         return res.status(404).json({ success: false, error: "Invalid or expired QR token." });
+       }
+
+       const team = result.teamJson as Team;
+       if (team.approvalStatus !== 'APPROVED') {
+         return res.status(403).json({ success: false, error: `Team ${team.id} is not approved for entry.` });
+       }
+
+       const alreadyCheckedIn = team.checkedInAt || team.members.every(m => m.checkedIn);
+       if (alreadyCheckedIn) {
+         return res.status(409).json({ success: false, error: `Team ${team.id} has already been checked in.` });
+       }
+
+       const checker = checkedInBy || 'gate-staff';
+       if (productionStoreEnabled) {
+         try {
+           const checkedIn = await checkInTeam(team.id, checker);
+           if (!checkedIn) {
+             return res.status(409).json({ success: false, error: `Team ${team.id} has already been checked in.` });
+           }
+         } catch (e) {
+           console.error('[GATE] Production store check-in failed:', e);
+         }
+       }
+
+       team.status = 'Checked-In';
+       team.checkedInAt = new Date().toISOString();
+       team.checkedInBy = checker;
+       team.members = team.members.map(m => ({
+         ...m,
+         checkedIn: true,
+         checkInTime: m.checkInTime || new Date().toISOString()
+       }));
+       const index = teams.findIndex(t => t.id === team.id);
+       if (index >= 0) teams[index] = team;
+       markDirty();
+
+       res.json({
+         success: true,
+         teamId: team.id,
+         teamName: team.teamName,
+         message: `Team ${team.id} checked in successfully.`
+       });
+     } catch (err: any) {
+       res.status(500).json({ success: false, error: "Gate check-in failed." });
+     }
+   });
 
   // Food Coupon Claim
   app.post("/api/food-coupon/claim", requireAdmin, (req, res) => {
@@ -3019,13 +3136,6 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
 
   app.post("/api/admin/logout", (req, res) => {
     clearAuthCookie(res);
-    const session = getSessionFromRequest(req);
-    if (session) {
-      const cookieRaw = req.headers.cookie || "";
-      const match = cookieRaw.split(";").map((v: string) => v.trim()).find((v: string) => v.startsWith(`${AUTH_COOKIE}=`));
-      const sid = match ? decodeURIComponent(match.slice(AUTH_COOKIE.length + 1)) : null;
-      if (sid) sessionStore.delete(sid);
-    }
     res.json({ success: true, message: "Logged out." });
   });
 
@@ -3535,16 +3645,23 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         return res.json({ success: true, team: sanitizeTeamForClient(team), alreadyApproved: true, message: 'Team already approved.' });
       }
       const patch: Partial<Team> = { status: decision, approvalStatus: decision };
-      if (decision === 'APPROVED') {
-        patch.approvalTimestamp = new Date().toISOString();
-        patch.paymentStatus = 'PAYMENT_APPROVED';
-        patch.approvalEmailStatus = 'PENDING';
-        if (!team.accessPassword) {
-          patch.portalPasswordPlain = team.portalPasswordPlain || generatePortalPassword();
-          patch.accessPassword = hashPassword(patch.portalPasswordPlain);
-        }
-        if (!team.teamQrCode) patch.teamQrCode = await QRCode.toDataURL(team.id, { width: 200, margin: 2 });
-      }
+       if (decision === 'APPROVED') {
+         patch.approvalTimestamp = new Date().toISOString();
+         patch.paymentStatus = 'PAYMENT_APPROVED';
+         patch.approvalEmailStatus = 'PENDING';
+         if (!team.accessPassword) {
+           patch.portalPasswordPlain = team.portalPasswordPlain || generatePortalPassword();
+           patch.accessPassword = hashPassword(patch.portalPasswordPlain);
+         }
+         if (!team.teamQrCode) {
+           const qrToken = crypto.randomBytes(32).toString('base64url');
+           patch.qrToken = qrToken;
+           const qrTokenHash = crypto.createHash('sha256').update(qrToken).digest('hex');
+           patch.qrTokenHash = qrTokenHash;
+           const appUrl = String(process.env.PUBLIC_APP_URL || 'https://real-anvation.vercel.app');
+           patch.teamQrCode = await QRCode.toDataURL(`${appUrl}/gate/check-in?t=${qrToken}`, { width: 200, margin: 2 });
+         }
+       }
       let updated = await persistAuditDecision(team, patch);
       if (!updated) return res.status(409).json({ success: false, error: 'Team changed during payment audit. Refresh and retry.' });
       if (decision === 'APPROVED') {
@@ -3580,18 +3697,21 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     }
   }
 
-  async function persistAuditDecision(previous: Team, patch: Partial<Team>): Promise<Team | undefined> {
-    const updated = productionStoreEnabled ? await updateProductionTeamAudit(previous, patch) : { ...previous, ...patch };
-    if (!updated) return undefined;
-    const index = teams.findIndex(t => t.id === previous.id);
-    if (index < 0) teams.push(updated);
-    else teams[index] = updated;
-    if (!productionStoreEnabled && !persistNow()) {
-      if (index >= 0) teams[index] = previous;
-      throw new Error('Payment audit persistence failed.');
-    }
-    return updated;
-  }
+   async function persistAuditDecision(previous: Team, patch: Partial<Team>): Promise<Team | undefined> {
+     const updated = productionStoreEnabled ? await updateProductionTeamAudit(previous, patch) : { ...previous, ...patch };
+     if (!updated) return undefined;
+     if (patch.qrTokenHash && productionStoreEnabled) {
+       try { await saveQrToken(updated.id, patch.qrTokenHash); } catch (e) { console.error('[QR TOKEN] Failed to save QR token:', e); }
+     }
+     const index = teams.findIndex(t => t.id === previous.id);
+     if (index < 0) teams.push(updated);
+     else teams[index] = updated;
+     if (!productionStoreEnabled && !persistNow()) {
+       if (index >= 0) teams[index] = previous;
+       throw new Error('Payment audit persistence failed.');
+     }
+     return updated;
+   }
 
   app.post("/api/admin/teams/:teamId/approve", requireAdmin, (req, res) => applyAuditDecision(req, res, 'APPROVED'));
   app.post("/api/admin/teams/:teamId/reject", requireAdmin, (req, res) => applyAuditDecision(req, res, 'REJECTED'));

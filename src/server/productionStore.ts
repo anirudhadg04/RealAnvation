@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import type { PoolClient } from "pg";
+import crypto from "node:crypto";
 import type { Team } from "../types";
 
 const databaseUrl = String(
@@ -106,6 +107,9 @@ export async function ensureProductionSchema(): Promise<void> {
       leader_email TEXT NOT NULL,
       preferred_track TEXT NOT NULL,
       team_json JSONB NOT NULL,
+      qr_token_hash TEXT UNIQUE,
+      checked_in_at TIMESTAMPTZ,
+      checked_in_by TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
@@ -216,11 +220,43 @@ export async function updateProductionTeamAudit(previous: Team, patch: Partial<T
   return rows[0]?.team_json as Team | undefined;
 }
 
- export async function deleteProductionTeam(teamId: string): Promise<void> {
-   if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
+export async function deleteProductionTeam(teamId: string): Promise<void> {
+  if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
   await ensureProductionSchema();
   await sql.transaction([
     sql`DELETE FROM registration_participants WHERE team_id = ${teamId}`,
     sql`DELETE FROM registrations WHERE team_id = ${teamId}`
   ]);
+}
+
+export async function saveQrToken(teamId: string, qrTokenHash: string): Promise<void> {
+  if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
+  await ensureProductionSchema();
+  await sql`UPDATE registrations SET qr_token_hash = ${qrTokenHash} WHERE team_id = ${teamId}`;
+}
+
+export async function invalidateQrToken(teamId: string): Promise<void> {
+  if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
+  await ensureProductionSchema();
+  await sql`UPDATE registrations SET qr_token_hash = NULL, checked_in_at = NULL, checked_in_by = NULL WHERE team_id = ${teamId}`;
+}
+
+export async function verifyQrToken(qrToken: string): Promise<{ teamId: string; teamJson: any } | null> {
+  if (!productionStoreEnabled) return null;
+  await ensureProductionSchema();
+  const tokenHash = crypto.createHash('sha256').update(qrToken).digest('hex');
+  const rows = await sql`SELECT team_id, team_json FROM registrations WHERE qr_token_hash = ${tokenHash} LIMIT 1`;
+  if (!rows.length) return null;
+  return { teamId: rows[0].team_id, teamJson: rows[0].team_json };
+}
+
+export async function checkInTeam(teamId: string, checkedInBy: string): Promise<boolean> {
+  if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
+  await ensureProductionSchema();
+  const result = await sql`
+    UPDATE registrations
+    SET checked_in_at = NOW(), checked_in_by = ${checkedInBy}
+    WHERE team_id = ${teamId} AND checked_in_at IS NULL
+  `;
+  return (result as any).rowCount > 0;
 }
