@@ -131,11 +131,11 @@ export async function loadProductionTeams(): Promise<Team[]> {
   return rows.map((row) => row.team_json as Team);
 }
 
-export async function findProductionDuplicate(conflict: {
-  teamName?: string;
-  participants?: Array<{ email?: string; usn?: string; phone?: string }>;
-}): Promise<{ code: DuplicateCode; value: string } | null> {
-  if (!sql) return null;
+ export async function findProductionDuplicate(conflict: {
+   teamName?: string;
+   participants?: Array<{ email?: string; usn?: string; phone?: string }>;
+ }): Promise<{ code: DuplicateCode; value: string } | null> {
+   if (!productionStoreEnabled) return null;
   await ensureProductionSchema();
   const teamNameKey = conflict.teamName?.trim().replace(/\s+/g, ' ').toLowerCase();
   if (teamNameKey) {
@@ -162,8 +162,8 @@ export async function findProductionDuplicate(conflict: {
   return null;
 }
 
-export async function saveProductionTeam(team: Team): Promise<void> {
-  if (!sql) throw new Error('DATABASE_URL is required for production registration storage.');
+ export async function saveProductionTeam(team: Team): Promise<void> {
+   if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
   await ensureProductionSchema();
   const statements = [sql`
     INSERT INTO registrations (team_id, team_name, team_name_key, leader_email, preferred_track, team_json)
@@ -178,8 +178,8 @@ export async function saveProductionTeam(team: Team): Promise<void> {
   await sql.transaction(statements);
 }
 
-export async function updateProductionTeam(team: Team): Promise<void> {
-  if (!sql) throw new Error('DATABASE_URL is required for production registration storage.');
+ export async function updateProductionTeam(team: Team): Promise<void> {
+   if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
   await ensureProductionSchema();
   const teamJson = JSON.stringify(team);
   const teamNameKey = team.teamName.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -201,8 +201,8 @@ export async function updateProductionTeam(team: Team): Promise<void> {
   ]);
 }
 
-export async function deleteProductionTeam(teamId: string): Promise<void> {
-  if (!sql) throw new Error('DATABASE_URL is required for production registration storage.');
+ export async function deleteProductionTeam(teamId: string): Promise<void> {
+   if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
   await ensureProductionSchema();
   await sql.transaction([
     sql`DELETE FROM registration_participants WHERE team_id = ${teamId}`,

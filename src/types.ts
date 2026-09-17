@@ -50,6 +50,7 @@ export interface Team {
   approvalReason?: string;
   paymentAuditTimestamp?: string;
   collegeIdImages?: Record<string, string>;
+  teamQrCode?: string;
 }
 
 export interface ProjectSubmission {

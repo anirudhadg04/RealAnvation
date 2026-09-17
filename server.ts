@@ -1255,34 +1255,35 @@ export async function startServer(options: { listen?: boolean } = {}) {
   }
 
   // Asynchronous Credential Delivery Helper
-  async function deliverCredentialsForTeam(team: Team, rawAccessPassword?: string): Promise<{
-    success: boolean;
-    deliveredCount: number;
-    failedCount: number;
-    results: Array<{ recipient: string; status: string; error?: string }>;
-  }> {
-    const participantList = (team.members || []).map((m) => ({
-      email: m.email,
-      name: m.fullName,
-      college: m.college || "KSSEM",
-      role: m.role || "Member"
-    }));
+   async function deliverCredentialsForTeam(team: Team, rawAccessPassword?: string): Promise<{
+     success: boolean;
+     deliveredCount: number;
+     failedCount: number;
+     results: Array<{ recipient: string; status: string; error?: string }>;
+   }> {
+     const participantList = (team.members || []).map((m) => ({
+       email: m.email,
+       name: m.fullName,
+       college: m.college || "KSSEM",
+       role: m.role || "Member"
+     }));
 
-    const subject = `🎉 Registration Confirmed: ANVATION 2026 [Team ID: ${team.id}]`;
-    const dates = "October 8 - October 9, 2026 (24-Hour Hackathon)";
-    const venue = "K.S. School of Engineering and Management (KSSEM), Kanakapura Road, Bengaluru - 560109";
+     const subject = `🎉 Registration Confirmed: ANVATION 2026 [Team ID: ${team.id}]`;
+     const dates = "October 8 - October 9, 2026 (24-Hour Hackathon)";
+     const venue = "K.S. School of Engineering and Management (KSSEM), Kanakapura Road, Bengaluru - 560109";
+     const password = rawAccessPassword || team.portalPasswordPlain || '';
 
-    let gateQrBuffer: Buffer | null = null;
-    let gateQrDataUrl = "";
-    try {
-      gateQrDataUrl = await QRCode.toDataURL(
-        `https://anvation.live/checkin?teamId=${team.id}`,
-        { width: 200, margin: 2 }
-      );
-      gateQrBuffer = Buffer.from(gateQrDataUrl.split(",")[1], "base64");
-    } catch (qrErr) {
-      console.warn(`[QR ERROR] Could not generate QR code for team ${team.id}:`, qrErr);
-    }
+     let gateQrBuffer: Buffer | null = null;
+     let gateQrDataUrl = "";
+     try {
+       gateQrDataUrl = await QRCode.toDataURL(
+         team.id,
+         { width: 200, margin: 2 }
+       );
+       gateQrBuffer = Buffer.from(gateQrDataUrl.split(",")[1], "base64");
+     } catch (qrErr) {
+       console.warn(`[QR ERROR] Could not generate QR code for team ${team.id}:`, qrErr);
+     }
 
     const recipientResults: Array<{ recipient: string; status: string; error?: string }> = [];
     let deliveredCount = 0;
@@ -1308,17 +1309,17 @@ export async function startServer(options: { listen?: boolean } = {}) {
             from,
             to: p.email,
             subject,
-            text: `ANVATION 2026 - Registration Confirmed\nHello ${p.name},\nTeam ID: ${team.id}\nTeam Name: ${team.teamName}\nDomain: ${team.domain || team.preferredTrack}\n${rawAccessPassword ? `Password: ${rawAccessPassword}\n` : ''}Payment UTR: ${team.paymentUtr || 'SUBMITTED'}\nVenue: ${venue}\nDates: ${dates}`,
-            html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
-              <div style="background:#0b192c;color:#fff;padding:20px 24px;">
-                <h1 style="margin:0;font-size:20px;">ANVATION 2026</h1>
-                <p style="margin:4px 0 0;font-size:12px;color:#67e8f9;">NATIONAL LEVEL 24-HOUR HACKATHON</p>
-              </div>
-              <div style="padding:24px;">
-                <h2 style="color:#0f172a;margin-top:0;">Registration Confirmed ✓</h2>
-                <p>Dear <strong>${p.name}</strong>,</p>
-                <p>Congratulations! Your team's registration for <strong>ANVATION 2026</strong> has been confirmed.</p>
-                <p><strong>Team ID:</strong> ${team.id}<br/><strong>Team Name:</strong> ${team.teamName}<br/><strong>Domain:</strong> ${team.domain || team.preferredTrack}${rawAccessPassword ? `<br/><strong>Password:</strong> ${rawAccessPassword}` : ''}<br/><strong>UTR:</strong> ${team.paymentUtr || 'SUBMITTED'}</p>
+             text: `ANVATION 2026 - Registration Confirmed\nHello ${p.name},\nTeam ID: ${team.id}\nTeam Name: ${team.teamName}\nDomain: ${team.domain || team.preferredTrack}\n${password ? `Password: ${password}\n` : ''}Payment UTR: ${team.paymentUtr || 'SUBMITTED'}\nVenue: ${venue}\nDates: ${dates}`,
+             html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+               <div style="background:#0b192c;color:#fff;padding:20px 24px;">
+                 <h1 style="margin:0;font-size:20px;">ANVATION 2026</h1>
+                 <p style="margin:4px 0 0;font-size:12px;color:#67e8f9;">NATIONAL LEVEL 24-HOUR HACKATHON</p>
+               </div>
+               <div style="padding:24px;">
+                 <h2 style="color:#0f172a;margin-top:0;">Registration Confirmed ✓</h2>
+                 <p>Dear <strong>${p.name}</strong>,</p>
+                 <p>Congratulations! Your team's registration for <strong>ANVATION 2026</strong> has been confirmed.</p>
+                 <p><strong>Team ID:</strong> ${team.id}<br/><strong>Team Name:</strong> ${team.teamName}<br/><strong>Domain:</strong> ${team.domain || team.preferredTrack}${password ? `<br/><strong>Password:</strong> ${password}` : ''}<br/><strong>UTR:</strong> ${team.paymentUtr || 'SUBMITTED'}</p>
                 ${gateQrDataUrl ? `<div style="text-align:center;margin:20px 0;"><img src="${gateQrDataUrl}" width="160" alt="Gate QR Pass"/><p style="font-size:12px;color:#64748b;">Gate Entry Pass QR</p></div>` : ''}
               </div>
             </div>`,
@@ -1985,43 +1986,43 @@ export async function startServer(options: { listen?: boolean } = {}) {
         return res.status(404).json({ success: false, error: `Team ${teamId} not found.` });
       }
 
-      const report = await deliverCredentialsForTeam(team);
-      res.json({
-        success: report.success,
-        deliveredCount: report.deliveredCount,
-        failedCount: report.failedCount,
-        recipients: report.results.map(r => r.recipient),
-        emailRecipients: report.results,
-        transport: getSmtpConfig().configured ? "SMTP" : "LOCAL",
-        smtpConfigured: getSmtpConfig().configured
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
+       const report = await deliverCredentialsForTeam(team, team.portalPasswordPlain);
+       res.json({
+         success: report.success,
+         deliveredCount: report.deliveredCount,
+         failedCount: report.failedCount,
+         recipients: report.results.map(r => r.recipient),
+         emailRecipients: report.results,
+         transport: getSmtpConfig().configured ? "SMTP" : "LOCAL",
+         smtpConfigured: getSmtpConfig().configured
+       });
+     } catch (err: any) {
+       res.status(500).json({ success: false, error: err.message });
+     }
+   });
 
-  app.post("/api/registration/:teamId/deliver-credentials/retry", requireAdmin, async (req, res) => {
-    try {
-      const { teamId } = req.params;
-      const team = teams.find(t => t.id.toLowerCase() === teamId.toLowerCase() || (t.regNumber || '').toLowerCase() === teamId.toLowerCase());
-      if (!team) {
-        return res.status(404).json({ success: false, error: `Team ${teamId} not found.` });
-      }
+   app.post("/api/registration/:teamId/deliver-credentials/retry", requireAdmin, async (req, res) => {
+     try {
+       const { teamId } = req.params;
+       const team = teams.find(t => t.id.toLowerCase() === teamId.toLowerCase() || (t.regNumber || '').toLowerCase() === teamId.toLowerCase());
+       if (!team) {
+         return res.status(404).json({ success: false, error: `Team ${teamId} not found.` });
+       }
 
-      const report = await deliverCredentialsForTeam(team);
-      res.json({
-        success: report.success,
-        deliveredCount: report.deliveredCount,
-        failedCount: report.failedCount,
-        recipients: report.results.map(r => r.recipient),
-        emailRecipients: report.results,
-        transport: getSmtpConfig().configured ? "SMTP" : "LOCAL",
-        smtpConfigured: getSmtpConfig().configured
-      });
-    } catch (err: any) {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  });
+       const report = await deliverCredentialsForTeam(team, team.portalPasswordPlain);
+       res.json({
+         success: report.success,
+         deliveredCount: report.deliveredCount,
+         failedCount: report.failedCount,
+         recipients: report.results.map(r => r.recipient),
+         emailRecipients: report.results,
+         transport: getSmtpConfig().configured ? "SMTP" : "LOCAL",
+         smtpConfigured: getSmtpConfig().configured
+       });
+     } catch (err: any) {
+       res.status(500).json({ success: false, error: err.message });
+     }
+   });
 
   // Verify PhonePe Payment Endpoint
   app.post("/api/verify-payment", async (req, res) => {
@@ -3465,58 +3466,69 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
   });
 
   // Payment UTR Verification API
-  app.post("/api/admin/teams/:teamId/approve", requireAdmin, async (req, res) => {
-    try {
-      const { teamId } = req.params;
-      const team = teams.find((candidate) => candidate.id.toLowerCase() === teamId.toLowerCase());
-      if (!team) return res.status(404).json({ success: false, error: "Team not found" });
-      if (team.approvalStatus === 'APPROVED') {
-        return res.json({ success: true, team, alreadyApproved: true, message: 'Team already approved.' });
-      }
-      if (team.approvalStatus === 'REJECTED') {
-        return res.status(409).json({ success: false, error: 'This team has already been rejected and cannot be approved.' });
-      }
+   app.post("/api/admin/teams/:teamId/approve", requireAdmin, async (req, res) => {
+     try {
+       const { teamId } = req.params;
+       const team = teams.find((candidate) => candidate.id.toLowerCase() === teamId.toLowerCase());
+       if (!team) return res.status(404).json({ success: false, error: "Team not found" });
+       if (team.approvalStatus === 'APPROVED') {
+         return res.json({ success: true, team, alreadyApproved: true, message: 'Team already approved.' });
+       }
+       if (team.approvalStatus === 'REJECTED') {
+         return res.status(409).json({ success: false, error: 'This team has already been rejected and cannot be approved.' });
+       }
 
-      const previousApprovalStatus = team.approvalStatus || 'PENDING';
-      team.approvalStatus = 'APPROVED';
-      team.approvalTimestamp = new Date().toISOString();
-      team.status = 'Confirmed' as any;
-      team.paymentStatus = 'PAYMENT_APPROVED' as any;
-      team.paymentAmountDetail = `Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.`;
-      team.approvalEmailStatus = 'PENDING';
+       const previousApprovalStatus = team.approvalStatus || 'PENDING';
+       team.approvalStatus = 'APPROVED';
+       team.approvalTimestamp = new Date().toISOString();
+       team.status = 'Confirmed' as any;
+       team.paymentStatus = 'PAYMENT_APPROVED' as any;
+       team.paymentAmountDetail = `Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.`;
+       team.approvalEmailStatus = 'PENDING';
 
-      if (productionStoreEnabled) {
-        try { await updateProductionTeam(team); } catch (storageErr) { console.error('[DATABASE] Production approval update failed:', storageErr); }
-      }
-      markDirty();
+       if (!team.portalPasswordPlain) {
+         team.portalPasswordPlain = generatePortalPassword();
+         team.accessPassword = hashPassword(team.portalPasswordPlain);
+       }
 
-      try {
-        await sendApprovalEmail(team);
-        team.approvalEmailStatus = 'SENT';
-        team.approvalEmailSentAt = new Date().toISOString();
-      } catch (emailErr: any) {
-        team.approvalEmailStatus = 'FAILED';
-        console.error('[EMAIL APPROVAL] Failed for team', team.id, emailErr?.message || emailErr);
-      }
+       try {
+         team.teamQrCode = await QRCode.toDataURL(team.id, { width: 200, margin: 2 });
+       } catch (qrErr) {
+         console.warn(`[QR ERROR] Could not generate QR code for team ${team.id}:`, qrErr);
+       }
 
-      auditLogs.unshift({
-        id: `log-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        actorEmail: req.session?.email || req.session?.username || 'unknown-admin',
-        actorRole: (req.session?.role || 'ADMIN') as AdminRole,
-        action: 'Team Approve',
-        target: `Team ${team.teamName} (${team.id})`,
-        beforeValue: previousApprovalStatus,
-        afterValue: 'APPROVED',
-        reason: 'Admin approved team after payment audit.',
-        ipAddress: req.ip || '127.0.0.1'
-      });
+       if (productionStoreEnabled) {
+         try { await updateProductionTeam(team); } catch (storageErr) { console.error('[DATABASE] Production approval update failed:', storageErr); }
+       }
+       markDirty();
 
-      return res.json({ success: true, team, approved: true, approvalEmailStatus: team.approvalEmailStatus, message: 'Team approved successfully.' });
-    } catch (err: any) {
-      return res.status(500).json({ success: false, error: err.message || 'Could not approve team.' });
-    }
-  });
+       try {
+         await sendApprovalEmail(team);
+         team.approvalEmailStatus = 'SENT';
+         team.approvalEmailSentAt = new Date().toISOString();
+       } catch (emailErr: any) {
+         team.approvalEmailStatus = 'FAILED';
+         console.error('[EMAIL APPROVAL] Failed for team', team.id, emailErr?.message || emailErr);
+       }
+
+       auditLogs.unshift({
+         id: `log-${Date.now()}`,
+         timestamp: new Date().toISOString(),
+         actorEmail: req.session?.email || req.session?.username || 'unknown-admin',
+         actorRole: (req.session?.role || 'ADMIN') as AdminRole,
+         action: 'Team Approve',
+         target: `Team ${team.teamName} (${team.id})`,
+         beforeValue: previousApprovalStatus,
+         afterValue: 'APPROVED',
+         reason: 'Admin approved team after payment audit.',
+         ipAddress: req.ip || '127.0.0.1'
+       });
+
+       return res.json({ success: true, team, approved: true, approvalEmailStatus: team.approvalEmailStatus, message: 'Team approved successfully.' });
+     } catch (err: any) {
+       return res.status(500).json({ success: false, error: err.message || 'Could not approve team.' });
+     }
+   });
 
   app.post("/api/admin/teams/:teamId/reject", requireAdmin, async (req, res) => {
     try {
