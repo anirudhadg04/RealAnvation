@@ -1342,7 +1342,9 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       leader_phone:            findCol(['team leader whatsapp']) || findCol(['team leader phone']),
       leader_gender:           findCol(['team leader gender']),
       num_teammates:           findCol(['number of teammates']),
-      utr:                     findCol(['transaction id', 'utr']) || findCol(['utr']),
+      utr_col1:                findCol(['transaction id', 'utr']) || findCol(['utr']),
+      utr_col2:                findNthCol(['transaction id', 'utr'], 1) || findNthCol(['utr'], 1),
+      utr_col3:                findNthCol(['transaction id', 'utr'], 2) || findNthCol(['utr'], 2),
     };
 
     // Participant 2 → 4 blocks. Each block repeats the same sub-columns.
@@ -1420,7 +1422,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
           }))
           .filter(p => p.full_name !== ''),
         payment: {
-          utr:           getCell(row, fieldMap.utr),
+          utr:           getCell(row, fieldMap.utr_col1) || getCell(row, fieldMap.utr_col2) || getCell(row, fieldMap.utr_col3) || '-',
         },
       });
     }
