@@ -3481,6 +3481,23 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       if (teamIndex === -1) return res.status(404).json({ success: false, error: "Team not found" });
       const originalTeam = teams[teamIndex];
       if (originalTeam.approvalStatus === 'APPROVED') {
+        // Team already approved — allow email retry if previous send failed
+        if (originalTeam.approvalEmailStatus === 'FAILED') {
+          try {
+            await sendApprovalEmail(originalTeam);
+            originalTeam.approvalEmailStatus = 'SENT';
+            originalTeam.approvalEmailSentAt = new Date().toISOString();
+            if (productionStoreEnabled) {
+              try { await updateProductionTeam(originalTeam); } catch {}
+            }
+            teams[teamIndex] = originalTeam;
+            markDirty();
+            return res.json({ success: true, team: originalTeam, alreadyApproved: true, approvalEmailStatus: 'SENT', message: 'Team already approved. Credential email resent.' });
+          } catch (emailErr: any) {
+            console.error('[EMAIL APPROVAL] Retry failed for team', originalTeam.id, emailErr?.message || emailErr);
+            return res.json({ success: true, team: originalTeam, alreadyApproved: true, approvalEmailStatus: 'FAILED', message: 'Team already approved. Email retry failed.' });
+          }
+        }
         return res.json({ success: true, team: originalTeam, alreadyApproved: true, message: 'Team already approved.' });
       }
       if (originalTeam.approvalStatus === 'REJECTED') {
@@ -3497,14 +3514,18 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       team.paymentAmountDetail = `Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.`;
       team.approvalEmailStatus = 'PENDING';
 
-      // Generate password and QR code for approval
-      const plainPassword = generatePortalPassword();
-      team.accessPassword = hashPassword(plainPassword);
-      team.portalPasswordPlain = plainPassword;
-      const qrCodeDataUrl = await QRCode.toDataURL(team.id, { width: 200 });
-      team.teamQrCode = qrCodeDataUrl;
+      // Generate password and QR code only if not already present (idempotent)
+      if (!team.accessPassword) {
+        const plainPassword = generatePortalPassword();
+        team.accessPassword = hashPassword(plainPassword);
+        team.portalPasswordPlain = plainPassword;
+      }
+      if (!team.teamQrCode) {
+        const qrCodeDataUrl = await QRCode.toDataURL(team.id, { width: 200 });
+        team.teamQrCode = qrCodeDataUrl;
+      }
 
-      // Persist changes
+      // Persist changes before sending email so retries are safe
       if (productionStoreEnabled) {
         try {
           await updateProductionTeam(team);
@@ -3661,12 +3682,32 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     }
 
     if (paymentStatus === 'Verified') {
+      // Generate password and QR only if not already present (idempotent)
+      if (!team.accessPassword) {
+        const plainPassword = generatePortalPassword();
+        team.accessPassword = hashPassword(plainPassword);
+        team.portalPasswordPlain = plainPassword;
+      }
+      if (!team.teamQrCode) {
+        const qrCodeDataUrl = await QRCode.toDataURL(team.id, { width: 200 });
+        team.teamQrCode = qrCodeDataUrl;
+      }
+
       team.paymentStatus = 'PAYMENT_APPROVED' as any;
       team.paymentAmountDetail = `Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.`;
       team.status = 'Confirmed' as any;
       team.approvalStatus = 'APPROVED';
       team.approvalTimestamp = new Date().toISOString();
       team.approvalEmailStatus = 'PENDING';
+
+      // Persist credentials before sending email so retries are safe
+      if (productionStoreEnabled) {
+        try {
+          await updateProductionTeam(team);
+        } catch (storageErr) {
+          console.error('[DATABASE] Production verification update failed:', storageErr);
+        }
+      }
 
       try {
         await sendApprovalEmail(team);
