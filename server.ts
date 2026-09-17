@@ -3591,77 +3591,12 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       const body = req.body || {};
       const { confirm } = body;
 
-      let headers: string[];
-      let dataRows: string[][];
-
-      if (!Array.isArray(body.rows) || !body.fieldMap) {
-        return res.status(400).json({ success: false, error: "XLSX payload (rows + fieldMap) is required." });
-      }
-      headers = body.headers || [];
-      dataRows = body.rows;
-
-      if (dataRows.length === 0) {
-        return res.status(400).json({ success: false, error: "No data rows found in the workbook." });
+      if (!Array.isArray(body.rows) || body.rows.length === 0) {
+        return res.status(400).json({ success: false, error: "XLSX payload (rows) is required." });
       }
 
-      const requiredColumns: Record<string, string[]> = {
-        team_name: ["team name"],
-        domain: ["select the domain"],
-        college: ["college"],
-        city: ["city"],
-        district: ["district"],
-        state: ["states"],
-        accommodation: ["accommodation"],
-        leader_full_name: ["team leader full name"],
-        leader_department: ["team leader department"],
-        leader_semester: ["team leader semester"],
-        leader_email: ["team leader email id"],
-        leader_phone: ["team leader whatsapp number"],
-        leader_gender: ["team leader gender"],
-        leader_college_id: ["team leader college id card"],
-        num_teammates: ["number of teammates"],
-        p2_full_name: ["participant 2 full name"],
-        p2_department: ["participant 2 department"],
-        p2_semester: ["participant 2 semester"],
-        p2_email: ["participant 2 email id"],
-        p2_phone: ["participant 2 phone number"],
-        p2_gender: ["participant 2 gender"],
-        p2_college_id: ["participant 2 college id card"],
-        p3_full_name: ["participant 3 full name"],
-        p3_department: ["participant 3 department"],
-        p3_semester: ["participant 3 semester"],
-        p3_email: ["participant 3 email id"],
-        p3_phone: ["participant 3 phone number"],
-        p3_gender: ["participant 3 gender"],
-        p3_college_id: ["participant 3 college id card"],
-        p4_full_name: ["participant 4 full name"],
-        p4_department: ["participant 4 department"],
-        p4_semester: ["participant 4 semester"],
-        p4_email: ["participant 4 email id"],
-        p4_phone: ["participant 4 phone number"],
-        p4_gender: ["participant 4 gender"],
-        p4_college_id: ["participant 4 college id card"],
-        utr: ["transaction id / utr number"],
-        payment_screenshot: ["payment slip"],
-        payment_confirmation: ["payment confirmation"]
-      };
-
-      const fieldMap: Record<string, number> = body.fieldMap || {};
-      if (!body.fieldMap) {
-        for (const [key, aliases] of Object.entries(requiredColumns)) {
-          const idx = aliases.findIndex(alias => headers.includes(alias));
-          if (idx === -1) {
-            return res.status(400).json({ success: false, error: `Missing required column: "${aliases[0]}". Found columns: ${headers.join(", ")}` });
-          }
-          fieldMap[key] = idx;
-        }
-      } else {
-        for (const [key, aliases] of Object.entries(requiredColumns)) {
-          if (fieldMap[key] === undefined || fieldMap[key] < 0) {
-            return res.status(400).json({ success: false, error: `Missing required column: "${aliases[0]}".` });
-          }
-        }
-      }
+      const dataRows = body.rows;
+      const validDomains = new Set(HACKATHON_TRACKS.map((t) => t.title));
 
       interface PreviewRow {
         rowIndex: number;
@@ -3669,7 +3604,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         leaderEmail: string;
         amount: string;
         utr: string;
-        paymentDetail: string;
+        participantCount: number;
         status: 'Valid' | 'Invalid';
         errors: string[];
         rowData?: any;
@@ -3687,43 +3622,47 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         const errors: string[] = [];
         const rowIndex = i + 1;
 
-        const teamName = (row[fieldMap["team_name"]] || "").trim();
-        const domain = (row[fieldMap["domain"]] || "").trim();
-        const college = (row[fieldMap["college"]] || "").trim();
-        const city = (row[fieldMap["city"]] || "").trim();
-        const district = (row[fieldMap["district"]] || "").trim();
-        const state = (row[fieldMap["state"]] || "").trim();
-        const accommodation = (row[fieldMap["accommodation"]] || "").trim();
-        const leaderFullName = (row[fieldMap["leader_full_name"]] || "").trim();
-        const leaderDepartment = (row[fieldMap["leader_department"]] || "").trim();
-        const leaderSemester = (row[fieldMap["leader_semester"]] || "").trim();
-        const leaderEmail = (row[fieldMap["leader_email"]] || "").trim();
-        const leaderPhone = (row[fieldMap["leader_phone"]] || "").trim();
-        const leaderGender = (row[fieldMap["leader_gender"]] || "").trim();
-        const leaderCollegeId = (row[fieldMap["leader_college_id"]] || "").trim();
-        const numTeammatesStr = (row[fieldMap["num_teammates"]] || "").trim();
-        const p2FullName = (row[fieldMap["p2_full_name"]] || "").trim();
-        const p2Department = (row[fieldMap["p2_department"]] || "").trim();
-        const p2Semester = (row[fieldMap["p2_semester"]] || "").trim();
-        const p2Email = (row[fieldMap["p2_email"]] || "").trim();
-        const p2Phone = (row[fieldMap["p2_phone"]] || "").trim();
-        const p2Gender = (row[fieldMap["p2_gender"]] || "").trim();
-        const p2CollegeId = (row[fieldMap["p2_college_id"]] || "").trim();
-        const p3FullName = (row[fieldMap["p3_full_name"]] || "").trim();
-        const p3Department = (row[fieldMap["p3_department"]] || "").trim();
-        const p3Semester = (row[fieldMap["p3_semester"]] || "").trim();
-        const p3Email = (row[fieldMap["p3_email"]] || "").trim();
-        const p3Phone = (row[fieldMap["p3_phone"]] || "").trim();
-        const p3Gender = (row[fieldMap["p3_gender"]] || "").trim();
-        const p3CollegeId = (row[fieldMap["p3_college_id"]] || "").trim();
-        const p4FullName = (row[fieldMap["p4_full_name"]] || "").trim();
-        const p4Department = (row[fieldMap["p4_department"]] || "").trim();
-        const p4Semester = (row[fieldMap["p4_semester"]] || "").trim();
-        const p4Email = (row[fieldMap["p4_email"]] || "").trim();
-        const p4Phone = (row[fieldMap["p4_phone"]] || "").trim();
-        const p4Gender = (row[fieldMap["p4_gender"]] || "").trim();
-        const p4CollegeId = (row[fieldMap["p4_college_id"]] || "").trim();
-        const utr = (row[fieldMap["utr"]] || "").trim();
+        const teamName = (row.team_name || "").trim();
+        const domain = (row.domain || "").trim();
+        const college = (row.college || "").trim();
+        const city = (row.city || "").trim();
+        const district = (row.district || "").trim();
+        const state = (row.state || "").trim();
+        const accommodation = (row.accommodation || "").trim();
+        const numTeammatesStr = (row.num_teammates || "").trim();
+        const utr = ((row.payment && row.payment.utr) || "").trim();
+
+        const leader = row.leader || {};
+        const leaderFullName = (leader.full_name || "").trim();
+        const leaderDepartment = (leader.department || "").trim();
+        const leaderSemester = (leader.semester || "").trim();
+        const leaderEmail = (leader.email || "").trim();
+        const leaderPhone = (leader.phone || "").trim();
+        const leaderGender = (leader.gender || "").trim();
+        const leaderCollegeId = (leader.college_id || "").trim();
+
+        const participants = Array.isArray(row.participants) ? row.participants : [];
+        const p2 = participants[0] || {};
+        const p3 = participants[1] || {};
+        const p4 = participants[2] || {};
+
+        const p2FullName = (p2.full_name || "").trim();
+        const p2Email = (p2.email || "").trim();
+        const p2Phone = (p2.phone || "").trim();
+        const p2Gender = (p2.gender || "").trim();
+        const p2CollegeId = (p2.college_id || "").trim();
+
+        const p3FullName = (p3.full_name || "").trim();
+        const p3Email = (p3.email || "").trim();
+        const p3Phone = (p3.phone || "").trim();
+        const p3Gender = (p3.gender || "").trim();
+        const p3CollegeId = (p3.college_id || "").trim();
+
+        const p4FullName = (p4.full_name || "").trim();
+        const p4Email = (p4.email || "").trim();
+        const p4Phone = (p4.phone || "").trim();
+        const p4Gender = (p4.gender || "").trim();
+        const p4CollegeId = (p4.college_id || "").trim();
 
         const numTeammates = parseInt(numTeammatesStr, 10);
         const cleanLeaderPhone = leaderPhone.replace(/[^0-9]/g, "");
@@ -3733,8 +3672,8 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         if (!teamName || teamName.length < 2 || teamName.length > 50) {
           errors.push("Team name must be between 2 and 50 characters.");
         }
-        if (!domain || !validRegistrationDomains.has(domain)) {
-          errors.push(`Invalid domain "${domain}". Must be one of: ${Array.from(validRegistrationDomains).join(", ")}`);
+        if (!domain || !validDomains.has(domain)) {
+          errors.push(`Invalid domain "${domain}". Must be one of: ${Array.from(validDomains).join(", ")}`);
         }
         if (!leaderFullName) errors.push("Team leader full name is required.");
         if (!leaderEmail || !/^[^\s@]+@gmail\.com$/i.test(leaderEmail)) {
@@ -3819,7 +3758,6 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         if (cleanUtr) importUtrs.add(cleanUtr);
 
         const amount = numTeammates === 2 ? "₹750" : "₹1000";
-        const paymentDetail = `Pending admin payment audit for ${cmsConfig.registrationFee || 250} INR`;
 
         preview.push({
           rowIndex,
@@ -3827,18 +3765,18 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           leaderEmail: leaderEmail || "(empty)",
           amount,
           utr: cleanUtr || "(empty)",
-          paymentDetail,
+          participantCount: numTeammates || 0,
           status: errors.length > 0 ? 'Invalid' : 'Valid',
           errors,
           rowData: {
             teamName, domain, college, city, district, state, accommodation,
             leaderFullName, leaderDepartment, leaderSemester, leaderEmail, leaderPhone, leaderGender, leaderCollegeId,
             numTeammates,
-            p2FullName, p2Department, p2Semester, p2Email, p2Phone, p2Gender, p2CollegeId,
-            p3FullName, p3Department, p3Semester, p3Email, p3Phone, p3Gender, p3CollegeId,
-             p4FullName, p4Department, p4Semester, p4Email, p4Phone, p4Gender, p4CollegeId,
-             utr: cleanUtr
-           }
+            p2FullName, p2Department: leaderDepartment, p2Semester: leaderSemester, p2Email, p2Phone, p2Gender, p2CollegeId,
+            p3FullName, p3Department: leaderDepartment, p3Semester: leaderSemester, p3Email, p3Phone, p3Gender, p3CollegeId,
+            p4FullName, p4Department: leaderDepartment, p4Semester: leaderSemester, p4Email, p4Phone, p4Gender, p4CollegeId,
+            utr: cleanUtr
+          }
         });
       }
 
@@ -3867,7 +3805,6 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           p.errors.push(`UTR "${rd.utr}" already exists in database.`);
           p.status = 'Invalid';
         }
-        // Check participant emails, phones, and college IDs against database
         const participantDefs = [
           { email: rd.p2Email, phone: rd.p2Phone, collegeId: rd.p2CollegeId, idx: 2 },
           { email: rd.p3Email, phone: rd.p3Phone, collegeId: rd.p3CollegeId, idx: 3 },

@@ -231,7 +231,7 @@ export const AdminPortal: React.FC = () => {
       leaderEmail: string;
       amount: string;
       utr: string;
-      paymentDetail: string;
+      participantCount: number;
       status: 'Valid' | 'Invalid';
       errors: string[];
     }> | null;
@@ -1223,7 +1223,7 @@ export const AdminPortal: React.FC = () => {
     setCsvImportModal(prev => ({ ...prev, preview: null, validationError: null }));
     try {
       const payload = buildXlsxImportPayload(xlsxImportData);
-      const res = await fetch('/api/admin/import-csv', {
+      const res = await fetch('/api/admin/import-xlsx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -1253,7 +1253,7 @@ export const AdminPortal: React.FC = () => {
     setCsvImportModal(prev => ({ ...prev, importing: true }));
     try {
       const payload = buildXlsxImportPayload(xlsxImportData);
-      const res = await fetch('/api/admin/import-csv', {
+      const res = await fetch('/api/admin/import-xlsx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, confirm: true })
@@ -1277,87 +1277,156 @@ export const AdminPortal: React.FC = () => {
   };
 
   const buildXlsxImportPayload = (rows: any[]) => {
+    // Normalize a raw header cell into a stable key.
+    const normalizeHeader = (raw: string): string =>
+      String(raw ?? '')
+        .replace(/[\r\n\t]+/g, ' ')
+        .replace(/\([^)]*\)/g, ' ')
+        .replace(/[?:]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+
     const headerRow = rows[0];
     const headers: string[] = [];
-    for (let c = 1; c <= 40; c++) {
+    for (let c = 1; c <= 60; c++) {
       const v = headerRow[`col_${c}`];
-      if (v === undefined) break;
-      headers.push(String(v).trim().toLowerCase());
+      if (v === undefined || v === '') break;
+      headers.push(normalizeHeader(v));
     }
 
-    const findIdx = (aliases: string[]) =>
-      aliases.findIndex(a => headers.includes(a.toLowerCase()));
-
-    const fieldMap: Record<string, number> = {};
-    const requiredColumns: Record<string, string[]> = {
-      team_name: ["team name"],
-      domain: ["select the domain"],
-      college: ["college"],
-      city: ["city"],
-      district: ["district"],
-      state: ["states"],
-      accommodation: ["accommodation"],
-      leader_full_name: ["team leader full name"],
-      leader_department: ["team leader department"],
-      leader_semester: ["team leader semester"],
-      leader_email: ["team leader email id"],
-      leader_phone: ["team leader whatsapp number"],
-      leader_gender: ["team leader gender"],
-      leader_college_id: ["team leader college id card"],
-      num_teammates: ["number of teammates"],
-      p2_full_name: ["participant 2 full name"],
-      p2_department: ["participant 2 department"],
-      p2_semester: ["participant 2 semester"],
-      p2_email: ["participant 2 email id"],
-      p2_phone: ["participant 2 phone number"],
-      p2_gender: ["participant 2 gender"],
-      p2_college_id: ["participant 2 college id card"],
-      p3_full_name: ["participant 3 full name"],
-      p3_department: ["participant 3 department"],
-      p3_semester: ["participant 3 semester"],
-      p3_email: ["participant 3 email id"],
-      p3_phone: ["participant 3 phone number"],
-      p3_gender: ["participant 3 gender"],
-      p3_college_id: ["participant 3 college id card"],
-      p4_full_name: ["participant 4 full name"],
-      p4_department: ["participant 4 department"],
-      p4_semester: ["participant 4 semester"],
-      p4_email: ["participant 4 email id"],
-      p4_phone: ["participant 4 phone number"],
-      p4_gender: ["participant 4 gender"],
-      p4_college_id: ["participant 4 college id card"],
-      utr: ["transaction id / utr number"],
-      payment_screenshot: ["payment slip"],
-      payment_confirmation: ["payment confirmation"]
+    // Returns the FIRST index whose normalized header contains ALL tokens.
+    const findCol = (tokens: string[], from = 0): number => {
+      for (let i = from; i < headers.length; i++) {
+        const h = headers[i];
+        if (tokens.every(t => h.includes(t))) return i;
+      }
+      return -1;
     };
 
-    for (const [key, aliases] of Object.entries(requiredColumns)) {
-      const idx = findIdx(aliases);
-      if (idx === -1) {
-        throw new Error(`Missing required column: "${aliases[0]}". Found columns: ${headers.join(", ")}`);
+    // Returns the Nth (0-based) index whose normalized header contains ALL tokens.
+    const findNthCol = (tokens: string[], n: number): number => {
+      let seen = 0;
+      for (let i = 0; i < headers.length; i++) {
+        const h = headers[i];
+        if (tokens.every(t => h.includes(t))) {
+          if (seen === n) return i;
+          seen++;
+        }
       }
-      fieldMap[key] = idx;
+      return -1;
+    };
+
+    // Shared columns (first occurrence)
+    const fieldMap: Record<string, number> = {
+      team_name:               findCol(['team name']),
+      domain:                  findCol(['select the domain']),
+      college:                 findCol(['college']),
+      city:                    findCol(['city']),
+      district:                findCol(['district']),
+      state:                   findCol(['state']),
+      accommodation:           findCol(['accommodation']),
+      leader_full_name:        findCol(['team leader full name']),
+      leader_department:       findCol(['department']),
+      leader_semester:         findCol(['semester']),
+      leader_email:            findCol(['team leader email']),
+      leader_phone:            findCol(['team leader whatsapp']),
+      leader_gender:           findCol(['team leader gender']),
+      leader_college_id:       findCol(['college id card']),
+      num_teammates:           findCol(['number of teammates']),
+      utr:                     findCol(['transaction id', 'utr']),
+      payment_screenshot:      findCol(['upload the payment slip']),
+      payment_confirmation:    findCol(['payment confirmation']),
+    };
+
+    // Participant 2 → 4 blocks. Each block repeats the same 7 sub-columns.
+    const participantBlock = (n: number) => {
+      const blockIdx = n - 2;
+      return {
+        full_name:    findNthCol(['participant', `${n}`, 'full name'], blockIdx),
+        department:   findNthCol(['department'], blockIdx + 1),
+        semester:     findNthCol(['semester'],   blockIdx + 1),
+        email:        findNthCol(['email'],      blockIdx + 1),
+        phone:        findNthCol(['phone'],      blockIdx + 1),
+        gender:       findNthCol(['gender'],     blockIdx + 1),
+        college_id:   findNthCol(['college id card'], blockIdx + 1),
+      };
+    };
+
+    const p2 = participantBlock(2);
+    const p3 = participantBlock(3);
+    const p4 = participantBlock(4);
+
+    // Validate required columns
+    const required: Array<[string, number]> = [
+      ['Team Name',            fieldMap.team_name],
+      ['College',              fieldMap.college],
+      ['Team Leader Full Name',fieldMap.leader_full_name],
+      ['Team Leader Email ID', fieldMap.leader_email],
+      ['Team Leader WhatsApp', fieldMap.leader_phone],
+      ['Transaction ID / UTR', fieldMap.utr],
+    ];
+    const missing = required.filter(([, idx]) => idx < 0).map(([name]) => name);
+    if (missing.length) {
+      throw new Error(
+        `Missing required column(s): ${missing.join(', ')}. ` +
+        `Detected headers: ${headers.join(' | ')}`
+      );
     }
 
+    const getCell = (row: Record<string, string>, idx: number): string =>
+      idx >= 0 ? String(row[`col_${idx + 1}`] ?? '').trim() : '';
+
+    // Build nested data rows
     const dataRows: any[] = [];
-    const images: any[] = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      const arr: string[] = [];
-      const rowImages: Record<string, string> = {};
-      for (let c = 0; c < headers.length; c++) {
-        arr.push(row[`col_${c + 1}`] || '');
-        const img = row[`img_${c + 1}`];
-        if (img) rowImages[`col_${c + 1}`] = img;
-      }
-      dataRows.push(arr);
-      images.push(rowImages);
+      const teamName = getCell(row, fieldMap.team_name);
+      if (!teamName) continue; // skip blank rows
+
+      const numTeammates = parseInt(getCell(row, fieldMap.num_teammates), 10);
+      const participantCount = (numTeammates === 2 || numTeammates === 3) ? numTeammates : 0;
+
+      dataRows.push({
+        team_name:           teamName,
+        domain:              getCell(row, fieldMap.domain),
+        college:             getCell(row, fieldMap.college),
+        city:                getCell(row, fieldMap.city),
+        district:            getCell(row, fieldMap.district),
+        state:               getCell(row, fieldMap.state),
+        accommodation:       getCell(row, fieldMap.accommodation),
+        num_teammates:       String(participantCount),
+        leader: {
+          full_name:   getCell(row, fieldMap.leader_full_name),
+          department:  getCell(row, fieldMap.leader_department),
+          semester:    getCell(row, fieldMap.leader_semester),
+          email:       getCell(row, fieldMap.leader_email),
+          phone:       getCell(row, fieldMap.leader_phone),
+          gender:      getCell(row, fieldMap.leader_gender),
+          college_id:  getCell(row, fieldMap.leader_college_id),
+        },
+        participants: [p2, p3, p4]
+          .map((block) => ({
+            full_name:   getCell(row, block.full_name),
+            department:  getCell(row, block.department),
+            semester:    getCell(row, block.semester),
+            email:       getCell(row, block.email),
+            phone:       getCell(row, block.phone),
+            gender:      getCell(row, block.gender),
+            college_id:  getCell(row, block.college_id),
+          }))
+          .filter(p => p.full_name !== ''),
+        payment: {
+          utr:           getCell(row, fieldMap.utr),
+          screenshot:    getCell(row, fieldMap.payment_screenshot),
+          confirmation:  getCell(row, fieldMap.payment_confirmation),
+        },
+      });
     }
 
     return {
       rows: dataRows,
-      fieldMap,
-      images,
+      headers,
       confirm: false
     };
   };
@@ -4592,7 +4661,7 @@ export const AdminPortal: React.FC = () => {
                           <th className="p-2">Row</th>
                           <th className="p-2">Team Name</th>
                           <th className="p-2">Leader Email</th>
-                          <th className="p-2">Amount</th>
+                          <th className="p-2">Participants</th>
                           <th className="p-2">UTR</th>
                           <th className="p-2">Status</th>
                           <th className="p-2">Errors</th>
@@ -4604,7 +4673,7 @@ export const AdminPortal: React.FC = () => {
                             <td className="p-2 font-mono text-slate-400">{row.rowIndex}</td>
                             <td className="p-2 text-white font-bold">{row.teamName}</td>
                             <td className="p-2 text-slate-300">{row.leaderEmail}</td>
-                            <td className="p-2 font-mono text-emerald-400">{row.amount}</td>
+                            <td className="p-2 font-mono text-emerald-400">{row.participantCount}</td>
                             <td className="p-2 font-mono text-amber-300">{row.utr}</td>
                             <td className="p-2">
                               <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
