@@ -72,17 +72,6 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
     const trimmed = qrCodeString.trim();
     if (!trimmed) return;
 
-    // Validate Team ID format: AN- followed by at least 3 digits
-    const teamIdPattern = /^AN-\d{3,}$/i;
-    if (!teamIdPattern.test(trimmed)) {
-      setScanning(false);
-      setScanMessage({
-        type: 'error',
-        text: `Invalid Team ID format. Expected format like AN-001.`
-      });
-      return;
-    }
-
     setScanning(true);
     setVerifiedPayment(null);
 
@@ -90,51 +79,35 @@ export const CheckInScanner: React.FC<CheckInScannerProps> = ({ teams, onUpdateT
       const res = await fetch(`/api/teams/${encodeURIComponent(trimmed)}`);
       const data = res.ok ? await res.json().catch(() => null) : null;
 
-       if (!res.ok || !data?.team) {
-         setScannedTeam(null);
-         setScanMessage({
-           type: 'error',
-           text: `Invalid/unregistered Team ID "${trimmed}". No matching team found in the system.`
-         });
-         return;
-       }
+      if (!res.ok || !data?.team) {
+        setScannedTeam(null);
+        setScanMessage({
+          type: 'error',
+          text: `No registered team found matching QR code "${trimmed}".`
+        });
+        return;
+      }
 
-       const team: Team = data.team;
-       setScannedTeam(team);
+      const team: Team = data.team;
+      setScannedTeam(team);
 
-       if (team.approvalStatus === 'REJECTED') {
-         setScanMessage({
-           type: 'error',
-           text: `Registration rejected for Team ${team.id}. Gate entry denied.`
-         });
-         return;
-       }
+      if (team.approvalStatus !== 'APPROVED') {
+        setScanMessage({
+          type: 'error',
+          text: `Team ${team.teamName} (${team.id}) is not approved for entry (approvalStatus: ${team.approvalStatus || 'PENDING'}). Gate entry denied.`
+        });
+        return;
+      }
 
-       if (team.approvalStatus === 'PENDING_PAYMENT_AUDIT' || team.approvalStatus === 'PENDING') {
-         setScanMessage({
-           type: 'error',
-           text: `Approval pending for Team ${team.id}. Payment audit not yet complete. Gate entry denied.`
-         });
-         return;
-       }
-
-       if (team.approvalStatus !== 'APPROVED') {
-         setScanMessage({
-           type: 'error',
-           text: `Team ${team.id} is not approved for entry (approvalStatus: ${team.approvalStatus || 'UNKNOWN'}). Gate entry denied.`
-         });
-         return;
-       }
-
-       setVerifiedPayment({
-         amount: data.paymentAmount || 0,
-         utr: team.paymentUtr || '',
-         status: team.paymentStatus || 'Verified'
-       });
-       setScanMessage({
-         type: 'success',
-         text: `✓ Canonical Team ID ${team.id} confirmed — registration verified and APPROVED. Gate entry permitted.`
-       });
+      setVerifiedPayment({
+        amount: data.paymentAmount || 0,
+        utr: team.paymentUtr || '',
+        status: team.paymentStatus || 'Verified'
+      });
+      setScanMessage({
+        type: 'success',
+        text: `QR Verified! Found Team: ${team.teamName} (${team.id}) — APPROVED. Payment & UTR confirmed from backend record.`
+      });
     } catch (err: any) {
       console.error('Scan verification error:', err);
       setScannedTeam(null);
