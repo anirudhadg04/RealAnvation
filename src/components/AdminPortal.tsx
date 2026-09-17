@@ -1136,6 +1136,43 @@ export const AdminPortal: React.FC = () => {
     }
   };
 
+  const handleApproveTeam = async (teamId: string) => {
+    try {
+      const res = await fetch(`/api/admin/teams/${encodeURIComponent(teamId)}/approve`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✓ Team ${teamId} approved and persisted.`);
+        fetchAdminData();
+      } else {
+        alert(data.error || 'Failed to approve team.');
+      }
+    } catch (err) {
+      alert("Error approving team");
+    }
+  };
+
+  const handleRejectTeam = async (teamId: string, reason: string) => {
+    try {
+      const res = await fetch(`/api/admin/teams/${encodeURIComponent(teamId)}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: reason || 'Payment audit rejected by admin' })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✓ Team ${teamId} rejection persisted. Team and participants preserved.`);
+        fetchAdminData();
+      } else {
+        alert(data.error || 'Failed to reject team.');
+      }
+    } catch (err) {
+      alert("Error rejecting team");
+    }
+  };
+
   const [csvContent, setCsvContent] = useState<string>('');
   const [xlsxImportData, setXlsxImportData] = useState<any[] | null>(null);
   const [xlsxImportError, setXlsxImportError] = useState<string | null>(null);
@@ -3725,13 +3762,13 @@ export const AdminPortal: React.FC = () => {
                           <td className="p-3">
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => handleVerifyUTR(t.id, 'Verified')}
+                                onClick={() => handleApproveTeam(t.id)}
                                 className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]"
                               >
                                 Approve
                               </button>
                               <button
-                                onClick={() => handleVerifyUTR(t.id, 'Rejected')}
+                                onClick={() => handleRejectTeam(t.id, '')}
                                 className="px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-bold text-[10px]"
                               >
                                 Reject
