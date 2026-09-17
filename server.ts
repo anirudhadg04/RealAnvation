@@ -1415,6 +1415,7 @@ export async function startServer(options: { listen?: boolean } = {}) {
     });
   }
 
+<<<<<<< HEAD
    async function sendApprovalEmail(team: Team): Promise<void> {
      const smtp = getSmtpConfig();
      if (!smtp.configured) {
@@ -1446,6 +1447,29 @@ export async function startServer(options: { listen?: boolean } = {}) {
        }
      }
    }
+=======
+  async function sendApprovalEmail(team: Team): Promise<void> {
+    const smtp = getSmtpConfig();
+    if (!smtp.configured) {
+      throw new Error("SMTP is not fully configured for approval delivery.");
+    }
+    const transporter = nodemailer.createTransport({
+      host: String(process.env.SMTP_HOST),
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === "true",
+      requireTLS: true,
+      auth: { user: String(process.env.SMTP_USER), pass: String(process.env.SMTP_PASS) }
+    });
+    const from = String(process.env.MAIL_FROM || process.env.SMTP_USER);
+    const recipients = team.members.map((m) => m.email);
+    const password = String(team.portalPasswordPlain || team.accessPassword || '');
+    const subject = `ANVATION 2026 Registration Approved — Team ${team.id}`;
+    const text = `Hello participants,\n\nYour team ${team.teamName} (${team.id}) has been approved by the admin.\n\nPayment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.\n\nPortal password: ${password}\n\nUse Team ID ${team.id} and this password to log in to the participant portal.\n\nTeam details:\n${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}`;
+    const html = `<p>Hello participants,</p><p>Your team <b>${team.teamName}</b> (<b>${team.id}</b>) has been approved by the admin.</p><p><b>Payment of ₹${cmsConfig.registrationFee || 0} has been verified. Registration approved.</b></p><p><b>Portal password:</b> ${password}</p><p>Use Team ID <b>${team.id}</b> and this password to log in to the participant portal.</p><p>${team.members.map((m) => `${m.fullName} (${m.role})`).join(", ")}</p>`;
+    await transporter.verify();
+    await Promise.all(recipients.map((recipient) => transporter.sendMail({ from, to: recipient, subject, text, html })));
+  }
+>>>>>>> parent of 67fe41a (changes v6)
 
   // API Routes
   app.get("/api/health", (req, res) => {
@@ -2422,6 +2446,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     }
   });
 
+<<<<<<< HEAD
    // Delete Team Endpoint
    app.delete("/api/teams/:id", requireSuperAdmin, async (req, res) => {
      const { id } = req.params;
@@ -2443,6 +2468,23 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
      res.json({ success: true, message: "Team deleted successfully" });
      markDirty();
    });
+=======
+  // Delete Team Endpoint
+  app.delete("/api/teams/:id", requireSuperAdmin, async (req, res) => {
+    const { id } = req.params;
+    const initialLen = teams.length;
+    teams = teams.filter(t => t.id.toLowerCase() !== id.toLowerCase() && (t.regNumber || '').toLowerCase() !== id.toLowerCase());
+    if (teams.length === initialLen) {
+      return res.status(404).json({ success: false, error: "Team not found" });
+    }
+    if (productionStoreEnabled) {
+      try { await deleteProductionTeam(id); } catch (e) { console.error('[DELETE] productionStore delete failed:', e); }
+    }
+    rebuildUniquenessIndexes();
+    res.json({ success: true, message: "Team deleted successfully" });
+    markDirty();
+  });
+>>>>>>> parent of 67fe41a (changes v6)
 
   // Edit / Update Individual Participant Endpoint
   app.put("/api/participants/:id", requireAdmin, (req, res) => {
@@ -3963,12 +4005,15 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
       const importedTeams: any[] = [];
       for (let i = 0; i < dataRows.length; i++) {
         const rd = preview[i].rowData!;
+<<<<<<< HEAD
         const norm = (v: any) => {
           const s = String(v || "").trim();
           return s === '-' ? '' : s;
         };
         const accLower = String(rd.accommodation || "").toLowerCase();
         const accRequired = accLower === "yes" || accLower === "true";
+=======
+>>>>>>> parent of 67fe41a (changes v6)
         const teamIndex = ++nextTeamNumber;
         const teamId = `AN-${String(teamIndex).padStart(3, '0')}`;
 
@@ -3983,7 +4028,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           gender: sanitizeInputString(norm(rd.leaderGender)),
           role: 'Leader',
           teamId,
-          accommodationRequired: accRequired,
+          accommodationRequired: accRequired2,
           checkedIn: false,
           foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
         };
@@ -4010,7 +4055,11 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
             gender: sanitizeInputString(norm(p.gender)),
             role: 'Member',
             teamId,
+<<<<<<< HEAD
             accommodationRequired: accRequired,
+=======
+accommodationRequired: accRequired2,
+>>>>>>> parent of 67fe41a (changes v6)
             checkedIn: false,
             foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
           });

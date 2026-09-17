@@ -1248,11 +1248,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const text = await res.text();
-      let data: any;
-      try { data = JSON.parse(text); } catch {
-        throw new Error(`Server returned an unexpected response (status ${res.status}). Please try again or contact support.`);
-      }
+      const data = await res.json();
       if (data.success) {
         setCsvImportModal(prev => ({
           ...prev,
@@ -1284,11 +1280,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, confirm: true })
       });
-      const text = await res.text();
-      let data: any;
-      try { data = JSON.parse(text); } catch {
-        throw new Error(`Server returned an unexpected response (status ${res.status}). Please try again or contact support.`);
-      }
+      const data = await res.json();
       if (data.success) {
         showToast(`✓ Imported ${data.count} team(s) into PENDING_PAYMENT_AUDIT flow.`);
         setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false });
@@ -3931,6 +3923,12 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
                                 className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]"
                               >
                                 Approve
+                              </button>
+                              <button
+                                onClick={() => handleVerifyUTR(t.id, 'Rejected')}
+                                className="px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-bold text-[10px]"
+                              >
+                                Reject
                               </button>
                               <button
                                 type="button"
