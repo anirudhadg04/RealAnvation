@@ -2408,12 +2408,15 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
   });
 
   // Delete Team Endpoint
-  app.delete("/api/teams/:id", requireSuperAdmin, (req, res) => {
+  app.delete("/api/teams/:id", requireSuperAdmin, async (req, res) => {
     const { id } = req.params;
     const initialLen = teams.length;
     teams = teams.filter(t => t.id.toLowerCase() !== id.toLowerCase() && (t.regNumber || '').toLowerCase() !== id.toLowerCase());
     if (teams.length === initialLen) {
       return res.status(404).json({ success: false, error: "Team not found" });
+    }
+    if (productionStoreEnabled) {
+      try { await deleteProductionTeam(id); } catch (e) { console.error('[DELETE] productionStore delete failed:', e); }
     }
     rebuildUniquenessIndexes();
     res.json({ success: true, message: "Team deleted successfully" });
@@ -3666,73 +3669,13 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         const p4Gender = (p4.gender || "").trim();
 
         const numTeammates = parseInt(numTeammatesStr, 10);
-        const cleanLeaderPhone = leaderPhone.replace(/[^0-9]/g, "");
-        const cleanUtr = utr.toUpperCase();
 
         if (!teamName || teamName.length < 2 || teamName.length > 50) {
           errors.push("Team name must be between 2 and 50 characters.");
         }
-        if (!domain || !validDomains.has(domain)) {
-          errors.push(`Invalid domain "${domain}". Must be one of: ${Array.from(validDomains).join(", ")}`);
-        }
-        if (!leaderFullName) errors.push("Team leader full name is required.");
-        if (!leaderEmail || !/^[^\s@]+@gmail\.com$/i.test(leaderEmail)) {
-          errors.push("Leader email must be a valid @gmail.com address.");
-        }
-        if (cleanLeaderPhone.length !== 10 || !/^\d{10}$/.test(cleanLeaderPhone)) {
-          errors.push("Leader phone number must contain exactly 10 digits.");
-        }
-        if (!leaderGender) {
-          errors.push("Team leader gender is required.");
-        }
-        if (!state) {
-          errors.push("State is required.");
-        }
-        if (numTeammates < 2 || numTeammates > 4) {
-          errors.push("Number of teammates must be between 2 and 4.");
-        }
 
-        const participantDefs = [
-          { name: p2FullName, email: p2Email, phone: p2Phone, gender: p2Gender, idx: 2 },
-          { name: p3FullName, email: p3Email, phone: p3Phone, gender: p3Gender, idx: 3 },
-          { name: p4FullName, email: p4Email, phone: p4Phone, gender: p4Gender, idx: 4 },
-        ];
-
-        for (let j = 0; j < numTeammates - 1; j++) {
-          const p = participantDefs[j];
-          if (!p.name) errors.push(`Participant ${p.idx} full name is required.`);
-          if (!p.email || !/^[^\s@]+@gmail\.com$/i.test(p.email)) {
-            errors.push(`Participant ${p.idx} email must be a valid @gmail.com address.`);
-          }
-          const cleanPhone = p.phone.replace(/[^0-9]/g, "");
-          if (cleanPhone.length !== 10 || !/^\d{10}$/.test(cleanPhone)) {
-            errors.push(`Participant ${p.idx} phone number must contain exactly 10 digits.`);
-          }
-          if (!p.gender) {
-            errors.push(`Participant ${p.idx} gender is required.`);
-          }
-        }
-
-        if (numTeammates === 2 && (p3FullName || p3Email || p3Phone)) {
-          errors.push("Participant 3 fields should be empty for 2-person teams.");
-        }
-        if (numTeammates === 2 && (p4FullName || p4Email || p4Phone)) {
-          errors.push("Participant 4 fields should be empty for 2-person teams.");
-        }
-        if (numTeammates === 3 && (p4FullName || p4Email || p4Phone)) {
-          errors.push("Participant 4 fields should be empty for 3-person teams.");
-        }
-
-        if (!utr || !/^\d{12}$/.test(cleanUtr)) {
-          errors.push("UTR must be exactly 12 digits.");
-        }
-        if (!college) errors.push("College is required.");
-        if (!state) errors.push("State is required.");
-
-        const accLower = accommodation.toLowerCase();
-        if (accLower !== "" && accLower !== "yes" && accLower !== "no" && accLower !== "true" && accLower !== "false") {
-          errors.push("Accommodation must be Yes/No.");
-        }
+        const accLower = (accommodation || "").toLowerCase();
+        const accRequired = accLower === "yes" || accLower === "true";
 
         const normTeamName = normalizeTeamName(teamName);
         if (teamName && importTeamNames.has(normTeamName)) {
@@ -3741,11 +3684,11 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         if (leaderEmail && importEmails.has(leaderEmail.toLowerCase())) {
           errors.push(`Duplicate email "${leaderEmail}" within import.`);
         }
-        if (cleanLeaderPhone && importPhones.has(cleanLeaderPhone)) {
-          errors.push(`Duplicate phone "${cleanLeaderPhone}" within import.`);
+        if (leaderPhone && importPhones.has(leaderPhone)) {
+          errors.push(`Duplicate phone "${leaderPhone}" within import.`);
         }
-        if (cleanUtr && importUtrs.has(cleanUtr)) {
-          errors.push(`Duplicate UTR "${cleanUtr}" within import.`);
+        if (utr && importUtrs.has(utr)) {
+          errors.push(`Duplicate UTR "${utr}" within import.`);
         }
 
         const teamEmails = [leaderEmail, p2Email, p3Email, p4Email].filter(Boolean);
@@ -3760,17 +3703,17 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
 
         importTeamNames.add(normTeamName);
         if (leaderEmail) importEmails.add(leaderEmail.toLowerCase());
-        if (cleanLeaderPhone) importPhones.add(cleanLeaderPhone);
-        if (cleanUtr) importUtrs.add(cleanUtr);
+        if (leaderPhone) importPhones.add(leaderPhone);
+        if (utr) importUtrs.add(utr);
 
         const amount = numTeammates * 250;
 
         preview.push({
           rowIndex,
-          teamName: teamName || "(empty)",
-          leaderEmail: leaderEmail || "(empty)",
+          teamName: teamName || "-",
+          leaderEmail: leaderEmail || "-",
           amount: `₹${amount}`,
-          utr: cleanUtr || "(empty)",
+          utr: utr || "-",
           participantCount: numTeammates || 0,
           status: errors.length > 0 ? 'Invalid' : 'Valid',
           errors,
@@ -3781,7 +3724,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
             p2FullName, p2Department, p2Semester, p2Email, p2Phone, p2Gender,
             p3FullName, p3Department, p3Semester, p3Email, p3Phone, p3Gender,
             p4FullName, p4Department, p4Semester, p4Email, p4Phone, p4Gender,
-            utr: cleanUtr
+            utr
           }
         });
       }
@@ -3793,16 +3736,15 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           p.errors.push(`Team name "${rd.teamName}" already exists in database.`);
           p.status = 'Invalid';
         }
-        if (registeredEmails.has(rd.leaderEmail.toLowerCase())) {
+        if (rd.leaderEmail && rd.leaderEmail !== '-' && registeredEmails.has(rd.leaderEmail.toLowerCase())) {
           p.errors.push(`Leader email "${rd.leaderEmail}" already exists in database.`);
           p.status = 'Invalid';
         }
-        const cleanLeaderPhone = rd.leaderPhone.replace(/[^0-9]/g, "");
-        if (cleanLeaderPhone && registeredPhones.has(cleanLeaderPhone)) {
-          p.errors.push(`Leader phone "${cleanLeaderPhone}" already exists in database.`);
+        if (rd.leaderPhone && rd.leaderPhone !== '-' && registeredPhones.has(rd.leaderPhone)) {
+          p.errors.push(`Leader phone "${rd.leaderPhone}" already exists in database.`);
           p.status = 'Invalid';
         }
-        if (rd.utr && registeredUtrs.has(rd.utr)) {
+        if (rd.utr && rd.utr !== '-' && registeredUtrs.has(rd.utr)) {
           p.errors.push(`UTR "${rd.utr}" already exists in database.`);
           p.status = 'Invalid';
         }
@@ -3813,13 +3755,12 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         ];
         for (let j = 0; j < rd.numTeammates - 1; j++) {
           const pdef = participantDefs[j];
-          if (pdef.email && registeredEmails.has(pdef.email.toLowerCase())) {
+          if (pdef.email && pdef.email !== '-' && registeredEmails.has(pdef.email.toLowerCase())) {
             p.errors.push(`Participant ${pdef.idx} email "${pdef.email}" already exists in database.`);
             p.status = 'Invalid';
           }
-          const cleanPhone = pdef.phone.replace(/[^0-9]/g, "");
-          if (cleanPhone && registeredPhones.has(cleanPhone)) {
-            p.errors.push(`Participant ${pdef.idx} phone "${cleanPhone}" already exists in database.`);
+          if (pdef.phone && pdef.phone !== '-' && registeredPhones.has(pdef.phone)) {
+            p.errors.push(`Participant ${pdef.idx} phone "${pdef.phone}" already exists in database.`);
             p.status = 'Invalid';
           }
         }
@@ -3863,7 +3804,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
           gender: sanitizeInputString(rd.leaderGender),
           role: 'Leader',
           teamId,
-          accommodationRequired: rd.accommodation.toLowerCase() === 'yes' || rd.accommodation.toLowerCase() === 'true',
+          accommodationRequired: accRequired2,
           checkedIn: false,
           foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
         };
@@ -3888,7 +3829,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
             gender: sanitizeInputString(p.gender),
             role: 'Member',
             teamId,
-            accommodationRequired: rd.accommodation.toLowerCase() === 'yes' || rd.accommodation.toLowerCase() === 'true',
+accommodationRequired: accRequired2,
             checkedIn: false,
             foodCouponsClaimed: { lunch1: false, dinner1: false, midnightSnack: false, breakfast2: false, lunch2: false }
           });

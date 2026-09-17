@@ -212,7 +212,8 @@ export const AdminPortal: React.FC = () => {
     state: true,
     reason: ''
   });
-  const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
+const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
+  const [deleteConfirmTeam, setDeleteConfirmTeam] = useState<{ teamId: string; teamName: string } | null>(null);
   const [passwordReset, setPasswordReset] = useState<{
     teamId: string;
     teamName: string;
@@ -221,7 +222,7 @@ export const AdminPortal: React.FC = () => {
     error?: string;
   } | null>(null);
 
-  // CSV Import State
+  // XLSX Import State
   const [csvImportModal, setCsvImportModal] = useState<{
     open: boolean;
     file: File | null;
@@ -723,9 +724,13 @@ export const AdminPortal: React.FC = () => {
   };
 
   const handleDeleteTeam = async (teamId: string, teamName: string) => {
-    if (!window.confirm(`Are you sure you want to delete team "${teamName}" (${teamId})? This action cannot be undone.`)) {
-      return;
-    }
+    setDeleteConfirmTeam({ teamId, teamName });
+  };
+
+  const confirmDeleteTeam = async () => {
+    if (!deleteConfirmTeam) return;
+    const { teamId, teamName } = deleteConfirmTeam;
+    setDeleteConfirmTeam(null);
 
     try {
       const res = await fetch(`/api/teams/${teamId}`, {
@@ -1241,8 +1246,10 @@ export const AdminPortal: React.FC = () => {
           validationError: data.error || 'Validation failed.'
         }));
       }
-    } catch (err) {
-      setCsvImportModal(prev => ({ ...prev, validationError: 'Network error during validation.' }));
+    } catch (err: any) {
+      const msg = err?.message || 'Validation failed.';
+      console.error('[XLSX VALIDATE ERROR]', err);
+      setCsvImportModal(prev => ({ ...prev, validationError: msg }));
     } finally {
       setXlsxValidating(false);
     }
@@ -1271,8 +1278,10 @@ export const AdminPortal: React.FC = () => {
           validationError: data.error || 'Import failed.'
         }));
       }
-    } catch (err) {
-      setCsvImportModal(prev => ({ ...prev, importing: false, validationError: 'Network error during import.' }));
+    } catch (err: any) {
+      const msg = err?.message || 'Import failed.';
+      console.error('[XLSX IMPORT ERROR]', err);
+      setCsvImportModal(prev => ({ ...prev, importing: false, validationError: msg }));
     }
   };
 
@@ -1289,7 +1298,7 @@ export const AdminPortal: React.FC = () => {
 
     const headerRow = rows[0];
     const headers: string[] = [];
-    for (let c = 1; c <= 60; c++) {
+    for (let c = 1; c <= 80; c++) {
       const v = headerRow[`col_${c}`];
       if (v === undefined || v === '') break;
       headers.push(normalizeHeader(v));
@@ -1330,16 +1339,13 @@ export const AdminPortal: React.FC = () => {
       leader_department:       findCol(['department']),
       leader_semester:         findCol(['semester']),
       leader_email:            findCol(['team leader email']),
-      leader_phone:            findCol(['team leader whatsapp']),
+      leader_phone:            findCol(['team leader whatsapp']) || findCol(['team leader phone']),
       leader_gender:           findCol(['team leader gender']),
-      leader_college_id:       findCol(['college id card']),
       num_teammates:           findCol(['number of teammates']),
-      utr:                     findCol(['transaction id', 'utr']),
-      payment_screenshot:      findCol(['upload the payment slip']),
-      payment_confirmation:    findCol(['payment confirmation']),
+      utr:                     findCol(['transaction id', 'utr']) || findCol(['utr']),
     };
 
-    // Participant 2 → 4 blocks. Each block repeats the same 7 sub-columns.
+    // Participant 2 → 4 blocks. Each block repeats the same sub-columns.
     const participantBlock = (n: number) => {
       const blockIdx = n - 2;
       return {
@@ -1347,9 +1353,8 @@ export const AdminPortal: React.FC = () => {
         department:   findNthCol(['department'], blockIdx + 1),
         semester:     findNthCol(['semester'],   blockIdx + 1),
         email:        findNthCol(['email'],      blockIdx + 1),
-        phone:        findNthCol(['phone'],      blockIdx + 1),
+        phone:        (() => { const idx = findNthCol(['phone'], blockIdx + 1); return idx >= 0 ? idx : findNthCol(['whatsapp'], blockIdx + 1); })(),
         gender:       findNthCol(['gender'],     blockIdx + 1),
-        college_id:   findNthCol(['college id card'], blockIdx + 1),
       };
     };
 
@@ -1385,7 +1390,7 @@ export const AdminPortal: React.FC = () => {
       if (!teamName) continue; // skip blank rows
 
       const numTeammates = parseInt(getCell(row, fieldMap.num_teammates), 10);
-      const participantCount = (numTeammates === 2 || numTeammates === 3) ? numTeammates : 0;
+      const participantCount = (numTeammates >= 2 && numTeammates <= 4) ? numTeammates : 0;
 
       dataRows.push({
         team_name:           teamName,
@@ -1403,7 +1408,6 @@ export const AdminPortal: React.FC = () => {
           email:       getCell(row, fieldMap.leader_email),
           phone:       getCell(row, fieldMap.leader_phone),
           gender:      getCell(row, fieldMap.leader_gender),
-          college_id:  getCell(row, fieldMap.leader_college_id),
         },
         participants: [p2, p3, p4]
           .map((block) => ({
@@ -1413,13 +1417,10 @@ export const AdminPortal: React.FC = () => {
             email:       getCell(row, block.email),
             phone:       getCell(row, block.phone),
             gender:      getCell(row, block.gender),
-            college_id:  getCell(row, block.college_id),
           }))
           .filter(p => p.full_name !== ''),
         payment: {
           utr:           getCell(row, fieldMap.utr),
-          screenshot:    getCell(row, fieldMap.payment_screenshot),
-          confirmation:  getCell(row, fieldMap.payment_confirmation),
         },
       });
     }
@@ -2332,7 +2333,7 @@ export const AdminPortal: React.FC = () => {
                                 </td>
                                 <td className="p-2 text-white font-bold">{m.fullName}</td>
                                 <td className="p-2 text-slate-300">{m.email}</td>
-                                <td className="p-2 font-mono text-slate-400">{m.phone || '—'}</td>
+                                <td className="p-2 font-mono text-slate-400">{m.phone || '-'}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -3824,8 +3825,8 @@ export const AdminPortal: React.FC = () => {
                             <div className="font-mono text-[10px] text-cyan-400">{t.id}</div>
                           </td>
                           <td className="p-3 text-slate-300 text-[11px]">
-                            <div className="font-bold text-white">{t.members[0]?.fullName || '—'}</div>
-                            <div className="text-slate-500">{t.leaderEmail || '—'}</div>
+                            <div className="font-bold text-white">{t.members[0]?.fullName || '-'}</div>
+                            <div className="text-slate-500">{t.leaderEmail || '-'}</div>
                           </td>
                           <td className="p-3">
                             <div className="flex items-center gap-2">
@@ -3843,7 +3844,7 @@ export const AdminPortal: React.FC = () => {
                             </div>
                           </td>
                           <td className="p-3 font-mono font-bold text-emerald-400">₹{t.members.length * (cmsConfig.registrationFee || 250)}</td>
-                          <td className="p-3 font-mono text-amber-300 font-bold break-all">{t.paymentUtr || 'N/A'}</td>
+                          <td className="p-3 font-mono text-amber-300 font-bold break-all">{t.paymentUtr || '-'}</td>
                           <td className="p-3">
                             <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
                               t.paymentStatus === 'Verified' || t.paymentStatus === 'PAYMENT_APPROVED' ? 'bg-emerald-950 text-emerald-400 border-emerald-800' :
@@ -3866,6 +3867,15 @@ export const AdminPortal: React.FC = () => {
                                 className="px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-bold text-[10px]"
                               >
                                 Reject
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteTeam(t.id, t.teamName)}
+                                className="px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-400 border border-red-800/60 font-bold text-[10px] flex items-center gap-1 transition-colors"
+                                title="Permanently delete this team"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                Delete
                               </button>
                               <button
                                 type="button"
@@ -3926,14 +3936,14 @@ export const AdminPortal: React.FC = () => {
                              </div>
 
                              <div className="space-y-2.5 text-xs flex-1">
-                               <div><strong className="text-slate-500">Name</strong><span className="text-white font-bold block break-words">{member.fullName || '—'}</span></div>
-                               <div><strong className="text-slate-500">Department</strong><span className="text-slate-300 block break-words">{member.department || '—'}</span></div>
-                               <div><strong className="text-slate-500">Semester</strong><span className="text-slate-300 block">{member.semester || '—'}</span></div>
-                               <div><strong className="text-slate-500">Email</strong><span className="text-slate-300 block break-all">{member.email || '—'}</span></div>
-                               <div><strong className="text-slate-500">Phone</strong><span className="text-slate-300 block">{member.phone || '—'}</span></div>
-                               <div><strong className="text-slate-500">Gender</strong><span className="text-slate-300 block">{member.gender || '—'}</span></div>
-                               <div><strong className="text-slate-500">College</strong><span className="text-slate-300 block break-words">{member.college || '—'}</span></div>
-                               <div><strong className="text-slate-500">State</strong><span className="text-slate-300 block">{member.state || '—'}</span></div>
+<div><strong className="text-slate-500">Name</strong><span className="text-white font-bold block break-words">{member.fullName || '-'}</span></div>
+                                <div><strong className="text-slate-500">Department</strong><span className="text-slate-300 block break-words">{member.department || '-'}</span></div>
+                                <div><strong className="text-slate-500">Semester</strong><span className="text-slate-300 block">{member.semester || '-'}</span></div>
+                                <div><strong className="text-slate-500">Email</strong><span className="text-slate-300 block break-all">{member.email || '-'}</span></div>
+                                <div><strong className="text-slate-500">Phone</strong><span className="text-slate-300 block">{member.phone || '-'}</span></div>
+                                <div><strong className="text-slate-500">Gender</strong><span className="text-slate-300 block">{member.gender || '-'}</span></div>
+                                <div><strong className="text-slate-500">College</strong><span className="text-slate-300 block break-words">{member.college || '-'}</span></div>
+                                <div><strong className="text-slate-500">State</strong><span className="text-slate-300 block">{member.state || '-'}</span></div>
                                <div><strong className="text-slate-500">Accommodation Required</strong><span className="text-slate-300 block">{member.accommodationRequired ? 'YES' : 'NO'}</span></div>
                              </div>
                            </div>
@@ -4590,7 +4600,7 @@ export const AdminPortal: React.FC = () => {
         </div>
       )}
 
-      {/* CSV Import Modal */}
+      {/* XLSX Import Modal */}
         {csvImportModal.open && (
           <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4" onClick={() => setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false })}>
             <div className="bg-slate-900 border border-slate-700 w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-3xl p-6 space-y-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
@@ -4734,7 +4744,42 @@ export const AdminPortal: React.FC = () => {
           </div>
         )}
 
-      </div>
-    );
-  };
+       {/* DELETE CONFIRMATION MODAL */}
+       {deleteConfirmTeam && (
+         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label="Confirm team deletion">
+           <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-red-500/40 shadow-2xl p-6 space-y-4">
+             <div className="flex items-center gap-3">
+               <div className="w-10 h-10 rounded-full bg-red-950 border border-red-500/50 flex items-center justify-center">
+                 <Trash2 className="w-5 h-5 text-red-400" />
+               </div>
+               <div>
+                 <h3 className="text-base font-black text-white">Permanently Delete Team?</h3>
+                 <p className="text-xs text-slate-400">This action cannot be undone.</p>
+               </div>
+             </div>
+             <p className="text-sm text-slate-300">
+               Are you sure you want to delete <strong className="text-white">"{deleteConfirmTeam.teamName}"</strong>? All participant data for this team will be permanently removed.
+             </p>
+             <div className="flex items-center gap-3 pt-2">
+               <button
+                 type="button"
+                 onClick={confirmDeleteTeam}
+                 className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm shadow-lg"
+               >
+                 Yes, Delete Permanently
+               </button>
+               <button
+                 type="button"
+                 onClick={() => setDeleteConfirmTeam(null)}
+                 className="px-5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 text-sm font-bold hover:bg-slate-900 hover:text-slate-200 transition-colors"
+               >
+                 No, Cancel
+               </button>
+             </div>
+           </div>
+         </div>
+       )}
+     </div>
+     );
+   };
 
