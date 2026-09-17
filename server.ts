@@ -4407,5 +4407,9 @@ let vercelAppPromise: Promise<any> | null = null;
 export default async function vercelHandler(req: any, res: any) {
   if (!vercelAppPromise) vercelAppPromise = startServer({ listen: false });
   const app = await vercelAppPromise;
+  // Vercel catch-all API routes strip the /api prefix; restore it for Express routing
+  if (req.url && !req.url.startsWith('/api/')) {
+    req.url = '/api' + req.url;
+  }
   return app(req, res);
 }

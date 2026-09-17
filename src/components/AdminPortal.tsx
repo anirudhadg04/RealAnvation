@@ -749,6 +749,10 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       const res = await fetch(`/api/teams/${teamId}`, {
         method: 'DELETE'
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error ${res.status}: ${text.slice(0, 200)}`);
+      }
       const data = await res.json();
       if (data.success) {
         showToast(`✓ Team ${teamName} deleted from records.`);
@@ -756,9 +760,9 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       } else {
         alert(data.error || "Failed to delete team");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Error deleting team");
+      alert(err?.message || "Error deleting team");
     }
   };
 
@@ -1128,13 +1132,19 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ teamId, paymentStatus: status })
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error ${res.status}: ${text.slice(0, 200)}`);
+      }
       const data = await res.json();
       if (data.success) {
         showToast(`✓ Payment status updated to ${status}!`);
         fetchAdminData();
+      } else {
+        alert(data.error || 'Failed to update payment status');
       }
-    } catch (err) {
-      alert("Error updating payment status");
+    } catch (err: any) {
+      alert(err?.message || 'Error updating payment status');
     }
   };
 
@@ -1248,6 +1258,10 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error ${res.status}: ${text.slice(0, 200)}`);
+      }
       const data = await res.json();
       if (data.success) {
         setCsvImportModal(prev => ({
@@ -1280,6 +1294,10 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...payload, confirm: true })
       });
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Server error ${res.status}: ${text.slice(0, 200)}`);
+      }
       const data = await res.json();
       if (data.success) {
         showToast(`✓ Imported ${data.count} team(s) into PENDING_PAYMENT_AUDIT flow.`);
@@ -3923,12 +3941,6 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
                                 className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px]"
                               >
                                 Approve
-                              </button>
-                              <button
-                                onClick={() => handleVerifyUTR(t.id, 'Rejected')}
-                                className="px-2.5 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-300 border border-red-800 font-bold text-[10px]"
-                              >
-                                Reject
                               </button>
                               <button
                                 type="button"
