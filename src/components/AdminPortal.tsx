@@ -1329,11 +1329,12 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
     };
 
     // Column indices from spreadsheet layout (0-based).
-    // DEPARTMENT: J1,R1,Y1,AF1,AM1,AT1,BA1  SEMESTER: K1,S1,Z1,AG1,AN1,AU1,BB1
-    // P2: Q1,X1,AL1  AA1,AO1  AB1,AP1  AC1,AQ1
-    // P3: AE1,AS1  AH1,AV1  AI1,AW1  AJ1,AX1
-    // P4: "-"  BC1  BD1  BE1
-    // UTR: BI1,BM1,BQ1
+    // DEPT: Leader=R(17)  P2=AM(38)  P3=AT(45)  P4=BA(52)
+    // SEM:  Leader=S(18)  P2=AN(39)  P3=AU(46)  P4=BB(53)
+    // P2:   AL(37), AO(40), AP(41), AQ(42)
+    // P3:   AS(44), AV(47), AW(48), AX(49)
+    // P4:   -, BC(54), BD(55), BE(56)
+    // UTR:  BQ(68)
     const fieldMap: Record<string, number[]> = {
       team_name:               [findCol(['team name'])],
       domain:                  [findCol(['select the domain'])],
@@ -1343,35 +1344,43 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       state:                   [findCol(['state'])],
       accommodation:           [findCol(['accommodation'])],
       leader_full_name:        [findCol(['team leader full name'])],
-      leader_department:       [9, 17, 24, 31, 38, 45, 52],
-      leader_semester:         [10, 18, 25, 32, 39, 46, 53],
+      leader_department:       [17],
+      leader_semester:         [18],
       leader_email:            [findCol(['team leader email'])],
       leader_phone:            [findCol(['team leader whatsapp']) || findCol(['team leader phone'])],
       leader_gender:           [findCol(['team leader gender'])],
       num_teammates:           [findCol(['number of teammates'])],
-      utr_cols:                [60, 64, 68],
+      utr_cols:                [68],
     };
 
-    // Participant blocks: each field has an array of column indices to check.
     const participantBlock = (n: number): Record<string, number[]> => {
       if (n === 4) {
         return {
           full_name:  [],
-          department: [],
-          semester:   [],
+          department: [52],
+          semester:   [53],
           email:      [54],
           phone:      [55],
           gender:     [56],
         };
       }
-      const base = (n - 2) * 7;
+      if (n === 3) {
+        return {
+          full_name:  [44],
+          department: [45],
+          semester:   [46],
+          email:      [47],
+          phone:      [48],
+          gender:     [49],
+        };
+      }
       return {
-        full_name:  [16 + base, 23 + base, 29 + base],
-        department: [9 + base, 17 + base, 24 + base, 31 + base, 38 + base, 45 + base, 52 + base],
-        semester:   [10 + base, 18 + base, 25 + base, 32 + base, 39 + base, 46 + base, 53 + base],
-        email:      [26 + base, 40 + base],
-        phone:      [27 + base, 41 + base],
-        gender:     [28 + base, 42 + base],
+        full_name:  [37],
+        department: [38],
+        semester:   [39],
+        email:      [40],
+        phone:      [41],
+        gender:     [42],
       };
     };
 
@@ -1407,58 +1416,61 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       return String(val ?? '').trim();
     };
 
-    const getCell = (currentRow: number, idxs: number[]): string => {
-      const ws = wsRef.current;
-      if (!ws) return '';
-      for (const idx of idxs) {
-        if (idx >= 0 && idx < headers.length) {
-          const val = extractCellValue(ws.getCell(currentRow, idx + 1).value);
-          if (val) return val;
-        }
-      }
-      return '';
-    };
-
     // Build nested data rows
     const dataRows: any[] = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const currentRow = row._row;
-      const teamName = getCell(currentRow, fieldMap.team_name);
+      const getCell = (idxs: number[]): string => {
+        for (const idx of idxs) {
+          if (idx >= 0 && idx < headers.length) {
+            let val: string;
+            if (wsRef.current) {
+              val = extractCellValue(wsRef.current.getCell(currentRow, idx + 1).value);
+            } else {
+              val = String(row[`col_${idx + 1}`] ?? '').trim();
+            }
+            if (val) return val;
+          }
+        }
+        return '';
+      };
+
+      const teamName = getCell(fieldMap.team_name);
       if (!teamName) continue; // skip blank rows
 
-      const numTeammates = parseInt(getCell(currentRow, fieldMap.num_teammates), 10);
+      const numTeammates = parseInt(getCell(fieldMap.num_teammates), 10);
       const participantCount = (numTeammates >= 2 && numTeammates <= 4) ? numTeammates : 0;
 
       dataRows.push({
         team_name:           teamName,
-        domain:              getCell(currentRow, fieldMap.domain),
-        college:             getCell(currentRow, fieldMap.college),
-        city:                getCell(currentRow, fieldMap.city),
-        district:            getCell(currentRow, fieldMap.district),
-        state:               getCell(currentRow, fieldMap.state),
-        accommodation:       getCell(currentRow, fieldMap.accommodation),
+        domain:              getCell(fieldMap.domain),
+        college:             getCell(fieldMap.college),
+        city:                getCell(fieldMap.city),
+        district:            getCell(fieldMap.district),
+        state:               getCell(fieldMap.state),
+        accommodation:       getCell(fieldMap.accommodation),
         num_teammates:       String(participantCount),
         leader: {
-          full_name:   getCell(currentRow, fieldMap.leader_full_name),
-          department:  getCell(currentRow, fieldMap.leader_department),
-          semester:    getCell(currentRow, fieldMap.leader_semester),
-          email:       getCell(currentRow, fieldMap.leader_email),
-          phone:       getCell(currentRow, fieldMap.leader_phone),
-          gender:      getCell(currentRow, fieldMap.leader_gender),
+          full_name:   getCell(fieldMap.leader_full_name),
+          department:  getCell(fieldMap.leader_department),
+          semester:    getCell(fieldMap.leader_semester),
+          email:       getCell(fieldMap.leader_email),
+          phone:       getCell(fieldMap.leader_phone),
+          gender:      getCell(fieldMap.leader_gender),
         },
         participants: [p2, p3, p4]
           .map((block) => ({
-            full_name:   getCell(currentRow, block.full_name),
-            department:  getCell(currentRow, block.department),
-            semester:    getCell(currentRow, block.semester),
-            email:       getCell(currentRow, block.email),
-            phone:       getCell(currentRow, block.phone),
-            gender:      getCell(currentRow, block.gender),
+            full_name:   getCell(block.full_name),
+            department:  getCell(block.department),
+            semester:    getCell(block.semester),
+            email:       getCell(block.email),
+            phone:       getCell(block.phone),
+            gender:      getCell(block.gender),
           }))
           .filter(p => p.full_name !== ''),
         payment: {
-          utr:           getCell(currentRow, fieldMap.utr_cols) || '-',
+          utr:           getCell(fieldMap.utr_cols) || '-',
         },
       });
     }

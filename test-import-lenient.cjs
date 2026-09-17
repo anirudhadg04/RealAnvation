@@ -66,24 +66,43 @@ wb.xlsx.readFile('C:\\Users\\gurur\\TF3\\RealAnvation\\sample-xlsx\\test.xlsx').
     state: findCol(['state']),
     accommodation: findCol(['accommodation']),
     leader_full_name: findCol(['team leader full name']),
-    leader_department: findCol(['department']),
-    leader_semester: findCol(['semester']),
+    leader_department: 17,
+    leader_semester: 18,
     leader_email: findCol(['team leader email']),
     leader_phone: findCol(['team leader whatsapp']) || findCol(['team leader phone']),
     leader_gender: findCol(['team leader gender']),
     num_teammates: findCol(['number of teammates']),
-    utr: findCol(['transaction id', 'utr']) || findCol(['utr']),
+    utr: 68,
   };
 
   const participantBlock = (n) => {
-    const blockIdx = n - 2;
+    if (n === 4) {
+      return {
+        full_name: -1,
+        department: 52,
+        semester: 53,
+        email: 54,
+        phone: 55,
+        gender: 56,
+      };
+    }
+    if (n === 3) {
+      return {
+        full_name: 44,
+        department: 45,
+        semester: 46,
+        email: 47,
+        phone: 48,
+        gender: 49,
+      };
+    }
     return {
-      full_name: findNthCol(['participant', String(n), 'full name'], blockIdx),
-      department: findNthCol(['department'], blockIdx + 1),
-      semester: findNthCol(['semester'], blockIdx + 1),
-      email: findNthCol(['email'], blockIdx + 1),
-      phone: (() => { const idx = findNthCol(['phone'], blockIdx + 1); return idx >= 0 ? idx : findNthCol(['whatsapp'], blockIdx + 1); })(),
-      gender: findNthCol(['gender'], blockIdx + 1),
+      full_name: 37,
+      department: 38,
+      semester: 39,
+      email: 40,
+      phone: 41,
+      gender: 42,
     };
   };
 

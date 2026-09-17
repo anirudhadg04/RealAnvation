@@ -1,16 +1,16 @@
 {
   "teams": [
     {
-      "id": "AN-036",
+      "id": "AN-076",
       "teamName": "SustainX",
       "leaderEmail": "ganeswarachari2006@gmail.com",
-      "accessPassword": "pbkdf2_sha256$e835f1dec4effbdb5ee0a44811cfa195$a009729c6655a75768c463a963dfef202672ed74fa7f994ee3892fed5a58edfb",
-      "portalPasswordPlain": "zdGf-W6fe-YRAQ",
+      "accessPassword": "pbkdf2_sha256$f2faa11bf809cbf881ac6faf287e46ed$a36b1f6b44d673a5e595c08a2b2c5a64b4f28e33de7492968103bb7f53fc61cd",
+      "portalPasswordPlain": "C8FA-ycff-PzoD",
       "domain": "SUSTAINABILITY & CLIMATE TECH",
       "preferredTrack": "SUSTAINABILITY & CLIMATE TECH",
       "members": [
         {
-          "id": "p-36-1",
+          "id": "p-76-1",
           "fullName": "Kopparapu Ganeswarachari",
           "college": "Mohan Babu University",
           "state": "Andhra Pradesh",
@@ -19,7 +19,7 @@
           "usn": "",
           "gender": "Male",
           "role": "Leader",
-          "teamId": "AN-036",
+          "teamId": "AN-076",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -31,7 +31,7 @@
           }
         },
         {
-          "id": "p-36-2",
+          "id": "p-76-2",
           "fullName": "",
           "college": "Mohan Babu University",
           "state": "Andhra Pradesh",
@@ -40,7 +40,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-036",
+          "teamId": "AN-076",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -52,7 +52,7 @@
           }
         },
         {
-          "id": "p-36-3",
+          "id": "p-76-3",
           "fullName": "",
           "college": "Mohan Babu University",
           "state": "Andhra Pradesh",
@@ -61,7 +61,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-036",
+          "teamId": "AN-076",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -73,7 +73,7 @@
           }
         },
         {
-          "id": "p-36-4",
+          "id": "p-76-4",
           "fullName": "",
           "college": "Mohan Babu University",
           "state": "Andhra Pradesh",
@@ -82,7 +82,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-036",
+          "teamId": "AN-076",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -95,7 +95,7 @@
         }
       ],
       "status": "PENDING_PAYMENT_AUDIT",
-      "createdAt": "2026-09-17T13:59:58.694Z",
+      "createdAt": "2026-09-17T15:18:01.274Z",
       "projectSubmitted": false,
       "paymentUtr": "612537289065",
       "paymentStatus": "PENDING_PAYMENT_AUDIT",
@@ -107,16 +107,16 @@
       "approvalEmailSentAt": ""
     },
     {
-      "id": "AN-037",
+      "id": "AN-077",
       "teamName": "EcoSentinals",
       "leaderEmail": "jsivaprasad6666@gmail.com",
-      "accessPassword": "pbkdf2_sha256$904612ed874f1a37a93e51cd23fd8a48$d64ba3bafc701f291f75186960d80ce9d9eeb2db9ce3624f95682224dcff4ca7",
-      "portalPasswordPlain": "s6KX-bMTh-Z8YB",
+      "accessPassword": "pbkdf2_sha256$4c61269a581da43c0a3d4db01e7fdbd4$c0d0af86931aed431874d45d33338ea670e438dab28efa1e0d66d67830396ecf",
+      "portalPasswordPlain": "R9du-99yG-BjKf",
       "domain": "SUSTAINABILITY & CLIMATE TECH",
       "preferredTrack": "SUSTAINABILITY & CLIMATE TECH",
       "members": [
         {
-          "id": "p-37-1",
+          "id": "p-77-1",
           "fullName": "Jajam Siva Prasad",
           "college": "Mohan Babu University",
           "state": "Andhra Pradesh",
@@ -125,7 +125,7 @@
           "usn": "",
           "gender": "Male",
           "role": "Leader",
-          "teamId": "AN-037",
+          "teamId": "AN-077",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -137,7 +137,7 @@
           }
         },
         {
-          "id": "p-37-2",
+          "id": "p-77-2",
           "fullName": "",
           "college": "Mohan Babu University",
           "state": "Andhra Pradesh",
@@ -146,7 +146,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-037",
+          "teamId": "AN-077",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -158,7 +158,7 @@
           }
         },
         {
-          "id": "p-37-3",
+          "id": "p-77-3",
           "fullName": "",
           "college": "Mohan Babu University",
           "state": "Andhra Pradesh",
@@ -167,7 +167,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-037",
+          "teamId": "AN-077",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -179,7 +179,7 @@
           }
         },
         {
-          "id": "p-37-4",
+          "id": "p-77-4",
           "fullName": "",
           "college": "Mohan Babu University",
           "state": "Andhra Pradesh",
@@ -188,7 +188,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-037",
+          "teamId": "AN-077",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -201,7 +201,7 @@
         }
       ],
       "status": "PENDING_PAYMENT_AUDIT",
-      "createdAt": "2026-09-17T13:59:58.840Z",
+      "createdAt": "2026-09-17T15:18:01.381Z",
       "projectSubmitted": false,
       "paymentUtr": "14026763705",
       "paymentStatus": "PENDING_PAYMENT_AUDIT",
@@ -213,16 +213,16 @@
       "approvalEmailSentAt": ""
     },
     {
-      "id": "AN-038",
+      "id": "AN-078",
       "teamName": "Team 404",
       "leaderEmail": "kunchapusumithra12@gmail.com",
-      "accessPassword": "pbkdf2_sha256$8eb25bf5b1ef2f1bfc84e074d5c67489$2de269a8e7ccd51198a6a13c477d7ba390a7497d886ba87f07d42f75d02b9920",
-      "portalPasswordPlain": "vRg4-kibQ-82eC",
+      "accessPassword": "pbkdf2_sha256$dec96071a1e8b08ca6fad490b469b247$e017d8f7af2a52c094f85062a2ed473a6d76bb9851906f9af1c787417ed73333",
+      "portalPasswordPlain": "cvim-nMd4-Mjkc",
       "domain": "CYBERSECURITY & PRIVACY",
       "preferredTrack": "CYBERSECURITY & PRIVACY",
       "members": [
         {
-          "id": "p-38-1",
+          "id": "p-78-1",
           "fullName": "K Sumithra",
           "college": "Mohan babu university",
           "state": "Andhra Pradesh",
@@ -231,7 +231,7 @@
           "usn": "",
           "gender": "Female",
           "role": "Leader",
-          "teamId": "AN-038",
+          "teamId": "AN-078",
           "accommodationRequired": true,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -243,7 +243,7 @@
           }
         },
         {
-          "id": "p-38-2",
+          "id": "p-78-2",
           "fullName": "",
           "college": "Mohan babu university",
           "state": "Andhra Pradesh",
@@ -252,7 +252,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-038",
+          "teamId": "AN-078",
           "accommodationRequired": true,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -264,7 +264,7 @@
           }
         },
         {
-          "id": "p-38-3",
+          "id": "p-78-3",
           "fullName": "",
           "college": "Mohan babu university",
           "state": "Andhra Pradesh",
@@ -273,7 +273,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-038",
+          "teamId": "AN-078",
           "accommodationRequired": true,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -285,7 +285,7 @@
           }
         },
         {
-          "id": "p-38-4",
+          "id": "p-78-4",
           "fullName": "",
           "college": "Mohan babu university",
           "state": "Andhra Pradesh",
@@ -294,7 +294,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-038",
+          "teamId": "AN-078",
           "accommodationRequired": true,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -307,7 +307,7 @@
         }
       ],
       "status": "PENDING_PAYMENT_AUDIT",
-      "createdAt": "2026-09-17T13:59:58.988Z",
+      "createdAt": "2026-09-17T15:18:01.537Z",
       "projectSubmitted": false,
       "paymentUtr": "154973632574",
       "paymentStatus": "PENDING_PAYMENT_AUDIT",
@@ -319,16 +319,16 @@
       "approvalEmailSentAt": ""
     },
     {
-      "id": "AN-039",
+      "id": "AN-079",
       "teamName": "Team elite",
       "leaderEmail": "snowfire00000@gmail.com",
-      "accessPassword": "pbkdf2_sha256$974c5852105fad91339f7f7055e919f1$495136fcacff504f6090d304cb810826a8251f51c2acfca0d7f354dea6c2b30a",
-      "portalPasswordPlain": "Umcz-2nCs-2fSD",
+      "accessPassword": "pbkdf2_sha256$6c214bf4f17af169ec0584d74c885250$00fac562473cac4a68ac2f464028eeb844068ae3e18ced671aa0756dad214ac8",
+      "portalPasswordPlain": "Rd4D-ey8L-Waj7",
       "domain": "SUSTAINABILITY & CLIMATE TECH",
       "preferredTrack": "SUSTAINABILITY & CLIMATE TECH",
       "members": [
         {
-          "id": "p-39-1",
+          "id": "p-79-1",
           "fullName": "Ramarathi valmiki praveen kumar",
           "college": "Mohan babu university",
           "state": "",
@@ -337,7 +337,7 @@
           "usn": "",
           "gender": "Male",
           "role": "Leader",
-          "teamId": "AN-039",
+          "teamId": "AN-079",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -349,16 +349,16 @@
           }
         },
         {
-          "id": "p-39-2",
-          "fullName": "Balija kishore",
+          "id": "p-79-2",
+          "fullName": "kirrakirru@gmail.com",
           "college": "Mohan babu university",
           "state": "",
-          "email": "kirrakirru@gmail.com",
-          "phone": "9177701868",
+          "email": "9177701868",
+          "phone": "Male",
           "usn": "",
-          "gender": "Male",
+          "gender": "https://drive.google.com/u/0/open?usp=forms_web&id=1iLlfcXLi5-iqRr1XK72ACBmF-2BqKFCY",
           "role": "Member",
-          "teamId": "AN-039",
+          "teamId": "AN-079",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -370,16 +370,16 @@
           }
         },
         {
-          "id": "p-39-3",
-          "fullName": "Balija kishore",
+          "id": "p-79-3",
+          "fullName": "tiruchanurupoojitha@gmail.com",
           "college": "Mohan babu university",
           "state": "",
-          "email": "tiruchanurupoojitha@gmail.com",
-          "phone": "8520814798",
+          "email": "8520814798",
+          "phone": "Female",
           "usn": "",
-          "gender": "Female",
+          "gender": "https://drive.google.com/u/0/open?usp=forms_web&id=1pwMxXvGre3XUKAM5pcQZzwIqoA2oZqSQ",
           "role": "Member",
-          "teamId": "AN-039",
+          "teamId": "AN-079",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -392,7 +392,7 @@
         }
       ],
       "status": "PENDING_PAYMENT_AUDIT",
-      "createdAt": "2026-09-17T13:59:59.135Z",
+      "createdAt": "2026-09-17T15:18:01.627Z",
       "projectSubmitted": false,
       "paymentUtr": "959390515649",
       "paymentStatus": "PENDING_PAYMENT_AUDIT",
@@ -404,16 +404,16 @@
       "approvalEmailSentAt": ""
     },
     {
-      "id": "AN-040",
+      "id": "AN-080",
       "teamName": "Team SHERIYA",
       "leaderEmail": "tharuns819@gmail.com",
-      "accessPassword": "pbkdf2_sha256$57a101891ee4cfa407611fef7a66df0c$d6a3ce4522e0643647982ab7dc92524b3d1778bc5e9dd61f5a821b9d65f99333",
-      "portalPasswordPlain": "V6HS-XdHA-bMww",
+      "accessPassword": "pbkdf2_sha256$ceebf4f4ddc23d1ad3ccb2b3e4ca0547$943820303457fe981b826744f80ec8d103624889568d4eff382c132c0bfdc0ec",
+      "portalPasswordPlain": "xyaJ-P3Rm-5j8q",
       "domain": "ARTIFICIAL INTELLIGENCE & MACHINE LEARNING",
       "preferredTrack": "ARTIFICIAL INTELLIGENCE & MACHINE LEARNING",
       "members": [
         {
-          "id": "p-40-1",
+          "id": "p-80-1",
           "fullName": "TARUNKUMAR S",
           "college": "GM UNIVERSITY DAVANAGERE",
           "state": "Karnataka",
@@ -422,7 +422,7 @@
           "usn": "",
           "gender": "Male",
           "role": "Leader",
-          "teamId": "AN-040",
+          "teamId": "AN-080",
           "accommodationRequired": true,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -434,8 +434,8 @@
           }
         },
         {
-          "id": "p-40-2",
-          "fullName": "Shantakumari S J",
+          "id": "p-80-2",
+          "fullName": "",
           "college": "GM UNIVERSITY DAVANAGERE",
           "state": "Karnataka",
           "email": "",
@@ -443,7 +443,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-040",
+          "teamId": "AN-080",
           "accommodationRequired": true,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -456,7 +456,7 @@
         }
       ],
       "status": "PENDING_PAYMENT_AUDIT",
-      "createdAt": "2026-09-17T13:59:59.263Z",
+      "createdAt": "2026-09-17T15:18:01.702Z",
       "projectSubmitted": false,
       "paymentUtr": "940571969613",
       "paymentStatus": "PENDING_PAYMENT_AUDIT",
@@ -468,16 +468,16 @@
       "approvalEmailSentAt": ""
     },
     {
-      "id": "AN-041",
+      "id": "AN-081",
       "teamName": "creAIte",
       "leaderEmail": "connect.janya22@gmail.com",
-      "accessPassword": "pbkdf2_sha256$786ecdf2f8674de90ae90e04c0c23d54$ee90a1482af082e40e28f83411ee18820bbf5264297987f8570ce3791ad6ad02",
-      "portalPasswordPlain": "BcEH-auiN-KyzQ",
+      "accessPassword": "pbkdf2_sha256$c70245ee46cf68bc7e8a319a6f76e5bf$a8e952862823dfa47397edc1038c15c795ebd6a99ebfe8709ce2c2481f957845",
+      "portalPasswordPlain": "RTsS-drko-J24m",
       "domain": "ARTIFICIAL INTELLIGENCE & MACHINE LEARNING",
       "preferredTrack": "ARTIFICIAL INTELLIGENCE & MACHINE LEARNING",
       "members": [
         {
-          "id": "p-41-1",
+          "id": "p-81-1",
           "fullName": "Janya C",
           "college": "K S School of Engineering",
           "state": "",
@@ -486,7 +486,7 @@
           "usn": "",
           "gender": "Female",
           "role": "Leader",
-          "teamId": "AN-041",
+          "teamId": "AN-081",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -498,7 +498,7 @@
           }
         },
         {
-          "id": "p-41-2",
+          "id": "p-81-2",
           "fullName": "",
           "college": "K S School of Engineering",
           "state": "",
@@ -507,7 +507,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-041",
+          "teamId": "AN-081",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -519,7 +519,7 @@
           }
         },
         {
-          "id": "p-41-3",
+          "id": "p-81-3",
           "fullName": "",
           "college": "K S School of Engineering",
           "state": "",
@@ -528,7 +528,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-041",
+          "teamId": "AN-081",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -540,7 +540,7 @@
           }
         },
         {
-          "id": "p-41-4",
+          "id": "p-81-4",
           "fullName": "",
           "college": "K S School of Engineering",
           "state": "",
@@ -549,7 +549,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-041",
+          "teamId": "AN-081",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -562,7 +562,7 @@
         }
       ],
       "status": "PENDING_PAYMENT_AUDIT",
-      "createdAt": "2026-09-17T13:59:59.386Z",
+      "createdAt": "2026-09-17T15:18:01.787Z",
       "projectSubmitted": false,
       "paymentUtr": "662504091047",
       "paymentStatus": "PENDING_PAYMENT_AUDIT",
@@ -574,16 +574,16 @@
       "approvalEmailSentAt": ""
     },
     {
-      "id": "AN-042",
+      "id": "AN-082",
       "teamName": "Lunar Logic",
       "leaderEmail": "aditiswamygowda@gmail.com",
-      "accessPassword": "pbkdf2_sha256$94511f85b3ec80d09557853e1fab1906$c485044be91141aa4ecf66d7b1ebb8fd80240da5a544296036c0dc5d11a56768",
-      "portalPasswordPlain": "AiNB-vruz-yPia",
+      "accessPassword": "pbkdf2_sha256$8c4cef84fa1f9fd40a38d06e1fe6c8b5$aac901703bffa9c1bf596f758193b70b3bc499e7dd3f248a4779f7a9fae3116e",
+      "portalPasswordPlain": "pNzZ-jCeR-y2xc",
       "domain": "ARTIFICIAL INTELLIGENCE & MACHINE LEARNING",
       "preferredTrack": "ARTIFICIAL INTELLIGENCE & MACHINE LEARNING",
       "members": [
         {
-          "id": "p-42-1",
+          "id": "p-82-1",
           "fullName": "Aditi SP",
           "college": "Sapthagiri NPS University",
           "state": "",
@@ -592,7 +592,7 @@
           "usn": "",
           "gender": "Female",
           "role": "Leader",
-          "teamId": "AN-042",
+          "teamId": "AN-082",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -604,7 +604,7 @@
           }
         },
         {
-          "id": "p-42-2",
+          "id": "p-82-2",
           "fullName": "",
           "college": "Sapthagiri NPS University",
           "state": "",
@@ -613,7 +613,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-042",
+          "teamId": "AN-082",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -625,7 +625,7 @@
           }
         },
         {
-          "id": "p-42-3",
+          "id": "p-82-3",
           "fullName": "",
           "college": "Sapthagiri NPS University",
           "state": "",
@@ -634,7 +634,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-042",
+          "teamId": "AN-082",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -646,7 +646,7 @@
           }
         },
         {
-          "id": "p-42-4",
+          "id": "p-82-4",
           "fullName": "",
           "college": "Sapthagiri NPS University",
           "state": "",
@@ -655,7 +655,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-042",
+          "teamId": "AN-082",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -668,7 +668,7 @@
         }
       ],
       "status": "PENDING_PAYMENT_AUDIT",
-      "createdAt": "2026-09-17T13:59:59.586Z",
+      "createdAt": "2026-09-17T15:18:01.876Z",
       "projectSubmitted": false,
       "paymentUtr": "625986610880",
       "paymentStatus": "PENDING_PAYMENT_AUDIT",
@@ -680,16 +680,16 @@
       "approvalEmailSentAt": ""
     },
     {
-      "id": "AN-043",
+      "id": "AN-083",
       "teamName": "Monster minds",
       "leaderEmail": "divyasomshekhar274@gmail.com",
-      "accessPassword": "pbkdf2_sha256$0228d1f46c1db596c01a2d3cf16aef98$7d4a618024e2029a268c41f74fc1743231dd67ce44132ed08ca96d695771ce97",
-      "portalPasswordPlain": "DCp5-pbt3-uysL",
+      "accessPassword": "pbkdf2_sha256$3d1ef07585fc7fa7a8ed0bf8fa704185$c2b97bef5517a638614f52a748e6427857bf53b46c7113d0183e459851a643f0",
+      "portalPasswordPlain": "Uz8g-7WfU-TxMC",
       "domain": "CYBERSECURITY & PRIVACY",
       "preferredTrack": "CYBERSECURITY & PRIVACY",
       "members": [
         {
-          "id": "p-43-1",
+          "id": "p-83-1",
           "fullName": "Divya S",
           "college": "Donbosco institute of technology",
           "state": "",
@@ -698,7 +698,7 @@
           "usn": "",
           "gender": "Female",
           "role": "Leader",
-          "teamId": "AN-043",
+          "teamId": "AN-083",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -710,7 +710,7 @@
           }
         },
         {
-          "id": "p-43-2",
+          "id": "p-83-2",
           "fullName": "",
           "college": "Donbosco institute of technology",
           "state": "",
@@ -719,7 +719,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-043",
+          "teamId": "AN-083",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -731,7 +731,7 @@
           }
         },
         {
-          "id": "p-43-3",
+          "id": "p-83-3",
           "fullName": "",
           "college": "Donbosco institute of technology",
           "state": "",
@@ -740,7 +740,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-043",
+          "teamId": "AN-083",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -752,7 +752,7 @@
           }
         },
         {
-          "id": "p-43-4",
+          "id": "p-83-4",
           "fullName": "",
           "college": "Donbosco institute of technology",
           "state": "",
@@ -761,7 +761,7 @@
           "usn": "",
           "gender": "",
           "role": "Member",
-          "teamId": "AN-043",
+          "teamId": "AN-083",
           "accommodationRequired": false,
           "checkedIn": false,
           "foodCouponsClaimed": {
@@ -774,7 +774,7 @@
         }
       ],
       "status": "PENDING_PAYMENT_AUDIT",
-      "createdAt": "2026-09-17T13:59:59.691Z",
+      "createdAt": "2026-09-17T15:18:01.975Z",
       "projectSubmitted": false,
       "paymentUtr": "7032668002",
       "paymentStatus": "PENDING_PAYMENT_AUDIT",
@@ -797,7 +797,7 @@
       "status": "Active",
       "createdAt": "2026-08-01",
       "twoFactorEnabled": true,
-      "lastLogin": "2026-09-17T13:59:28.018Z"
+      "lastLogin": "2026-09-17T15:17:19.695Z"
     },
     {
       "id": "adm-2",
@@ -872,6 +872,42 @@
   ],
   "auditLogs": [
     {
+      "id": "log-1789658251182",
+      "timestamp": "2026-09-17T15:17:31.182Z",
+      "actorEmail": "superadmin@kssem.edu.in",
+      "actorRole": "SUPER_ADMIN",
+      "action": "Team Reject",
+      "target": "Team creAIte (AN-073)",
+      "beforeValue": "PENDING",
+      "afterValue": "REJECTED",
+      "reason": "Payment audit rejected by admin",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log-1789657742087",
+      "timestamp": "2026-09-17T15:09:02.087Z",
+      "actorEmail": "superadmin@kssem.edu.in",
+      "actorRole": "SUPER_ADMIN",
+      "action": "Team Reject",
+      "target": "Team EcoSentinals (AN-061)",
+      "beforeValue": "PENDING",
+      "afterValue": "REJECTED",
+      "reason": "Payment audit rejected by admin",
+      "ipAddress": "127.0.0.1"
+    },
+    {
+      "id": "log-1789656282082",
+      "timestamp": "2026-09-17T14:44:42.082Z",
+      "actorEmail": "superadmin@kssem.edu.in",
+      "actorRole": "SUPER_ADMIN",
+      "action": "Team Reject",
+      "target": "Team Team elite (AN-055)",
+      "beforeValue": "PENDING",
+      "afterValue": "REJECTED",
+      "reason": "Payment audit rejected by admin",
+      "ipAddress": "127.0.0.1"
+    },
+    {
       "id": "log-1789650700916",
       "timestamp": "2026-09-17T13:11:40.916Z",
       "actorEmail": "superadmin@kssem.edu.in",
@@ -944,5 +980,5 @@
       "ipAddress": "192.168.1.10"
     }
   ],
-  "nextTeamNumber": 43
+  "nextTeamNumber": 83
 }
