@@ -1,16 +1,17 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/[[...path]].ts": {
+    "api/[...path].ts": {
       "maxDuration": 60,
       "memory": 1024,
-      "includeFiles": "dist/** src/** eng.traineddata"
+      "includeFiles": "dist/server.cjs"
     }
   },
   "rewrites": [
     {
-      "source": "/((?!api/).*)",
+      "source": "/(.*)",
       "destination": "/index.html"
     }
   ]

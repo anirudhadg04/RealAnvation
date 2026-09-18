@@ -166,9 +166,7 @@ export async function loadProductionTeams(): Promise<Team[]> {
   return null;
 }
 
- export async function saveProductionTeam(team: Team): Promise<void> {
-   if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
-  await ensureProductionSchema();
+function insertProductionTeamStatements(team: Team): PgQuery[] {
   const statements = [sql`
     INSERT INTO registrations (team_id, team_name, team_name_key, leader_email, preferred_track, team_json)
     VALUES (${team.id}, ${team.teamName}, ${team.teamName.trim().replace(/\s+/g, ' ').toLowerCase()}, ${team.leaderEmail}, ${team.preferredTrack}, ${JSON.stringify(team)}::jsonb)
@@ -176,10 +174,24 @@ export async function loadProductionTeams(): Promise<Team[]> {
   for (const participant of team.members) {
     statements.push(sql`
       INSERT INTO registration_participants (participant_id, team_id, email, usn, phone, participant_json)
-      VALUES (${participant.id}, ${team.id}, ${participant.email.trim().toLowerCase()}, ${participant.usn.trim().toUpperCase()}, ${participant.phone.replace(/[^0-9]/g, '')}, ${JSON.stringify(participant)}::jsonb)
+      VALUES (${participant.id}, ${team.id}, ${participant.email.trim().toLowerCase()}, ${(participant.usn || participant.id).trim().toUpperCase()}, ${participant.phone.replace(/[^0-9]/g, '')}, ${JSON.stringify(participant)}::jsonb)
     `);
   }
-  await sql.transaction(statements);
+  return statements;
+}
+
+/**
+ * Saves one or more new teams in one PostgreSQL transaction.  Import callers
+ * use the batch form so a failed row never leaves a partially imported ledger.
+ */
+export async function saveProductionTeams(teams: Team[]): Promise<void> {
+  if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
+  await ensureProductionSchema();
+  await sql.transaction(teams.flatMap(insertProductionTeamStatements));
+}
+
+export async function saveProductionTeam(team: Team): Promise<void> {
+  await saveProductionTeams([team]);
 }
 
  export async function updateProductionTeam(team: Team): Promise<void> {
@@ -200,7 +212,7 @@ export async function loadProductionTeams(): Promise<Team[]> {
     sql`DELETE FROM registration_participants WHERE team_id = ${team.id}`,
     ...team.members.map((participant) => sql`
       INSERT INTO registration_participants (participant_id, team_id, email, usn, phone, participant_json)
-      VALUES (${participant.id}, ${team.id}, ${participant.email.trim().toLowerCase()}, ${participant.usn.trim().toUpperCase()}, ${participant.phone.replace(/[^0-9]/g, '')}, ${JSON.stringify(participant)}::jsonb)
+      VALUES (${participant.id}, ${team.id}, ${participant.email.trim().toLowerCase()}, ${(participant.usn || participant.id).trim().toUpperCase()}, ${participant.phone.replace(/[^0-9]/g, '')}, ${JSON.stringify(participant)}::jsonb)
     `)
   ]);
 }

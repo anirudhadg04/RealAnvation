@@ -75,7 +75,7 @@ export default function App() {
 
   const fetchLiveStats = async () => {
     try {
-      const res = await fetch('/api/teams');
+      const res = await fetch('/api/public/registration-stats');
       const data = await res.json();
       if (data.success && data.stats) {
         setLiveStats(data.stats);

@@ -1153,7 +1153,6 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   const [xlsxImportError, setXlsxImportError] = useState<string | null>(null);
   const [xlsxValidating, setXlsxValidating] = useState(false);
   const csvFileRef = React.useRef<HTMLInputElement>(null);
-  const wsRef = React.useRef<ExcelJS.Worksheet | null>(null);
 
   const handleXlsxFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1175,44 +1174,6 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         setXlsxImportError('No worksheet found in the workbook.');
         return;
       }
-      wsRef.current = ws;
-
-      // Extract embedded images keyed by worksheet anchor (row/column)
-      const imageMap: Record<string, string> = {};
-      const promises: Promise<void>[] = [];
-      (ws.getImages() || []).forEach((img: any) => {
-        promises.push((async () => {
-          try {
-            const media = wb.getImage(img.imageId) as any;
-            if (!media) return;
-            let raw: Uint8Array | null = null;
-            if (media.buffer) {
-              raw = media.buffer instanceof Uint8Array ? media.buffer : new Uint8Array(media.buffer);
-            } else if (media.base64) {
-              const bin = atob(media.base64);
-              raw = new Uint8Array(bin.length);
-              for (let k = 0; k < bin.length; k++) raw[k] = bin.charCodeAt(k);
-            }
-            if (!raw) return;
-            const ext = (media.extension || 'png').toLowerCase();
-            const mime = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' : ext === 'gif' ? 'image/gif' : 'image/png';
-            let b64 = '';
-            const CHUNK = 0x8000;
-            for (let i = 0; i < raw.length; i += CHUNK) {
-              b64 += btoa(String.fromCharCode(...raw.subarray(i, i + CHUNK)));
-            }
-            const dataUrl = `data:${mime};base64,${b64}`;
-            const tl = img.range && img.range.tl;
-            const row = tl ? tl.row : 0;
-            const col = tl ? tl.col : 0;
-            imageMap[`${row}:${col}`] = dataUrl;
-          } catch (err) {
-            console.warn('[XLSX image extraction failed]', err);
-          }
-        })());
-      });
-      await Promise.all(promises);
-
       const rows: any[] = [];
       ws.eachRow({ includeEmpty: false }, (row, rowNumber) => {
         const obj: any = {};
@@ -1226,11 +1187,8 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
             else val = String(val);
           }
           obj[`col_${colNumber}`] = String(val ?? '');
-          const img = imageMap[`${rowNumber - 1}:${colNumber - 1}`];
-          if (img) obj[`img_${colNumber}`] = img;
         });
         obj._row = rowNumber;
-        obj._images = imageMap;
         rows.push(obj);
       });
 
@@ -1319,195 +1277,64 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   };
 
   const buildXlsxImportPayload = (rows: any[]) => {
-    // Normalize a raw header cell into a stable key.
-    const normalizeHeader = (raw: string): string =>
-      String(raw ?? '')
-        .replace(/[\r\n\t]+/g, ' ')
-        .replace(/\([^)]*\)/g, ' ')
-        .replace(/[?:]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-
-    const headerRow = rows[0];
-    const headers: string[] = [];
-    for (let c = 1; c <= 80; c++) {
-      const v = headerRow[`col_${c}`];
-      if (v === undefined || v === '') break;
-      headers.push(normalizeHeader(v));
+    // This Google Forms workbook has repeated generic headers. Map by the
+    // verified physical positions instead of searching for the first matching
+    // label. Column numbers here are Excel's 1-based positions.
+    const col = {
+      teamName: 2, domain: 3, college: 4, city: 5, district: 6, state: 7,
+      accommodation: 8, leaderName: 9, leaderDepartment: 18, leaderSemester: 19,
+      leaderEmail: 12, leaderPhone: 13, leaderGender: 14, participantCount: 16,
+      p2Name: 38, p2Department: 39, p2Semester: 40, p2Email: 41, p2Phone: 42, p2Gender: 43,
+      p3Name: 45, p3Department: 46, p3Semester: 47, p3Email: 48, p3Phone: 49, p3Gender: 50,
+      p4Department: 53, p4Semester: 54, p4Email: 55, p4Phone: 56, p4Gender: 57,
+      utr: 69,
+    } as const;
+    const missingColumns = ["Team Name (B)", "Team Leader Full Name (I)", "Transaction ID / UTR (BQ)"]
+      .filter((_, index) => !rows[0]?.[`col_${[col.teamName, col.leaderName, col.utr][index]}`]);
+    if (missingColumns.length) {
+      throw new Error(`This is not the expected Google Forms workbook. Missing required column(s): ${missingColumns.join(", ")}.`);
     }
-
-    // Returns the FIRST index whose normalized header contains ALL tokens.
-    const findCol = (tokens: string[], from = 0): number => {
-      for (let i = from; i < headers.length; i++) {
-        const h = headers[i];
-        if (tokens.every(t => h.includes(t))) return i;
-      }
-      return -1;
+    const getCell = (row: any, column: number) => {
+      const value = String(row[`col_${column}`] ?? "").trim();
+      return value || "—";
     };
 
-    // Returns the Nth (0-based) index whose normalized header contains ALL tokens.
-    const findNthCol = (tokens: string[], n: number): number => {
-      let seen = 0;
-      for (let i = 0; i < headers.length; i++) {
-        const h = headers[i];
-        if (tokens.every(t => h.includes(t))) {
-          if (seen === n) return i;
-          seen++;
-        }
-      }
-      return -1;
-    };
-
-    // Column indices from spreadsheet layout (0-based).
-    // DEPT: Leader=R(17)  P2=AM(38)  P3=AT(45)  P4=BA(52)
-    // SEM:  Leader=S(18)  P2=AN(39)  P3=AU(46)  P4=BB(53)
-    // P2:   AL(37), AO(40), AP(41), AQ(42)
-    // P3:   AS(44), AV(47), AW(48), AX(49)
-    // P4:   -, BC(54), BD(55), BE(56)
-    // UTR:  BQ(68)
-    const fieldMap: Record<string, number[]> = {
-      team_name:               [findCol(['team name'])],
-      domain:                  [findCol(['select the domain'])],
-      college:                 [findCol(['college'])],
-      city:                    [findCol(['city'])],
-      district:                [findCol(['district'])],
-      state:                   [findCol(['state'])],
-      accommodation:           [findCol(['accommodation'])],
-      leader_full_name:        [findCol(['team leader full name'])],
-      leader_department:       [17],
-      leader_semester:         [18],
-      leader_email:            [findCol(['team leader email'])],
-      leader_phone:            [findCol(['team leader whatsapp']) || findCol(['team leader phone'])],
-      leader_gender:           [findCol(['team leader gender'])],
-      num_teammates:           [findCol(['number of teammates'])],
-      utr_cols:                [68],
-    };
-
-    const participantBlock = (n: number): Record<string, number[]> => {
-      if (n === 4) {
-        return {
-          full_name:  [],
-          department: [52],
-          semester:   [53],
-          email:      [54],
-          phone:      [55],
-          gender:     [56],
-        };
-      }
-      if (n === 3) {
-        return {
-          full_name:  [44],
-          department: [45],
-          semester:   [46],
-          email:      [47],
-          phone:      [48],
-          gender:     [49],
-        };
-      }
-      return {
-        full_name:  [37],
-        department: [38],
-        semester:   [39],
-        email:      [40],
-        phone:      [41],
-        gender:     [42],
-      };
-    };
-
-    const p2 = participantBlock(2);
-    const p3 = participantBlock(3);
-    const p4 = participantBlock(4);
-
-    // Validate required columns
-    const required: Array<[string, number[]]> = [
-      ['Team Name',            fieldMap.team_name],
-      ['College',              fieldMap.college],
-      ['Team Leader Full Name',fieldMap.leader_full_name],
-      ['Team Leader Email ID', fieldMap.leader_email],
-      ['Team Leader WhatsApp', fieldMap.leader_phone],
-      ['Transaction ID / UTR', fieldMap.utr_cols],
-    ];
-    const missing = required.filter(([, idxs]) => idxs.every(i => i < 0 || i >= headers.length)).map(([name]) => name);
-    if (missing.length) {
-      throw new Error(
-        `Missing required column(s): ${missing.join(', ')}. ` +
-        `Detected headers: ${headers.join(' | ')}`
-      );
-    }
-
-    const extractCellValue = (val: any): string => {
-      if (val && typeof val === 'object' && 'text' in val) val = val.text;
-      if (val && typeof val === 'object' && 'value' in val) val = val.value;
-      if (typeof val === 'object' && val !== null) {
-        if (val.r != null && val.t === 'n') val = val.r;
-        else if (val.t === 'd') val = val.v ? new Date(val.v).toISOString() : '';
-        else val = String(val);
-      }
-      return String(val ?? '').trim();
-    };
-
-    // Build nested data rows
     const dataRows: any[] = [];
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
-      const currentRow = row._row;
-    const getCell = (idxs: number[]): string => {
-      for (const idx of idxs) {
-        if (idx >= 0 && idx < headers.length) {
-          let val: string;
-          if (wsRef.current) {
-            val = extractCellValue(wsRef.current.getCell(currentRow, idx + 1).value);
-          } else {
-            val = String(row[`col_${idx + 1}`] ?? '').trim();
-          }
-          if (val) return val;
-        }
-      }
-      return '-';
-    };
-
-    const teamName = getCell(fieldMap.team_name);
-    if (!teamName || teamName === '-') continue; // skip blank rows
-
-    const numTeammates = parseInt(getCell(fieldMap.num_teammates), 10);
-    const participantCount = (numTeammates >= 2 && numTeammates <= 4) ? numTeammates : 0;
-
-    dataRows.push({
+      const teamName = getCell(row, col.teamName);
+      if (teamName === '—') continue;
+      dataRows.push({
       team_name:           teamName,
-      domain:              getCell(fieldMap.domain),
-      college:             getCell(fieldMap.college),
-      city:                getCell(fieldMap.city),
-      district:            getCell(fieldMap.district),
-      state:               getCell(fieldMap.state),
-      accommodation:       getCell(fieldMap.accommodation),
-      num_teammates:       String(participantCount),
+      domain:              getCell(row, col.domain),
+      college:             getCell(row, col.college),
+      city:                getCell(row, col.city),
+      district:            getCell(row, col.district),
+      state:               getCell(row, col.state),
+      accommodation:       getCell(row, col.accommodation),
+      num_teammates:       getCell(row, col.participantCount),
       leader: {
-        full_name:   getCell(fieldMap.leader_full_name),
-        department:  getCell(fieldMap.leader_department),
-        semester:    getCell(fieldMap.leader_semester),
-        email:       getCell(fieldMap.leader_email),
-        phone:       getCell(fieldMap.leader_phone),
-        gender:      getCell(fieldMap.leader_gender),
+        full_name:   getCell(row, col.leaderName),
+        department:  getCell(row, col.leaderDepartment),
+        semester:    getCell(row, col.leaderSemester),
+        email:       getCell(row, col.leaderEmail),
+        phone:       getCell(row, col.leaderPhone),
+        gender:      getCell(row, col.leaderGender),
       },
-      participants: [p2, p3, p4]
-        .map((block) => ({
-          full_name:   getCell(block.full_name),
-          department:  getCell(block.department),
-          semester:    getCell(block.semester),
-          email:       getCell(block.email),
-          phone:       getCell(block.phone),
-          gender:      getCell(block.gender),
-        })),
+      participants: [
+        { full_name: getCell(row, col.p2Name), department: getCell(row, col.p2Department), semester: getCell(row, col.p2Semester), email: getCell(row, col.p2Email), phone: getCell(row, col.p2Phone), gender: getCell(row, col.p2Gender) },
+        { full_name: getCell(row, col.p3Name), department: getCell(row, col.p3Department), semester: getCell(row, col.p3Semester), email: getCell(row, col.p3Email), phone: getCell(row, col.p3Phone), gender: getCell(row, col.p3Gender) },
+        // The source has no Participant 4 name cell in the approved mapping.
+        { full_name: '—', department: getCell(row, col.p4Department), semester: getCell(row, col.p4Semester), email: getCell(row, col.p4Email), phone: getCell(row, col.p4Phone), gender: getCell(row, col.p4Gender) },
+      ],
       payment: {
-        utr:           getCell(fieldMap.utr_cols) || '-',
+        utr: getCell(row, col.utr),
       },
     });
     }
 
     return {
       rows: dataRows,
-      headers,
       confirm: false
     };
   };
