@@ -570,6 +570,10 @@ export async function startServer(options: { listen?: boolean } = {}) {
     if (!sessionId) return null;
     const expiresAt = activeSessions.get(sessionId);
     if (typeof expiresAt !== "number") {
+      // Vercel Functions are stateless across invocations. A valid signed
+      // session may have been created by a different warm function instance,
+      // so the local registry cannot be the source of truth there.
+      if (process.env.VERCEL) return session;
       activeSessions.delete(sessionId);
       return null;
     }

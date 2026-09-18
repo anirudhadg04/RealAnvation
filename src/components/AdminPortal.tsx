@@ -391,6 +391,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       const res = await fetch('/api/admin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ identifier, password: pass })
       });
       const data = await res.json();
@@ -756,7 +757,8 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
 
     try {
       const res = await fetch(`/api/teams/${teamId}`, {
-        method: 'DELETE'
+        method: 'DELETE',
+        credentials: 'include'
       });
       if (!res.ok) {
         const text = await res.text();
@@ -1139,6 +1141,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       const res = await fetch('/api/finance/verify-utr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ teamId, paymentStatus: status })
       });
       if (!res.ok) {
@@ -1223,6 +1226,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       const res = await fetch('/api/admin/import-xlsx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
@@ -1259,6 +1263,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       const res = await fetch('/api/admin/import-xlsx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ ...payload, confirm: true })
       });
       if (!res.ok) {
