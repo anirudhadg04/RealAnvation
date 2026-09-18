@@ -4546,20 +4546,6 @@ participants: [
                 </div>
               )}
 
-              {csvImportModal.preview && (
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300">
-                  <label className="flex items-center gap-2">
-                    Status for selected new team(s)
-                    <select value={xlsxImportStatus} onChange={(event) => setXlsxImportStatus(event.target.value as typeof xlsxImportStatus)} className="rounded-lg bg-slate-900 border border-slate-700 px-2 py-1 text-white">
-                      <option value="PENDING_PAYMENT_AUDIT">Pending payment audit</option>
-                      <option value="APPROVED">Approved</option>
-                      <option value="REJECTED">Rejected</option>
-                    </select>
-                  </label>
-                  <span>Select only the rows to accept.</span>
-                </div>
-              )}
-
               {csvImportModal.file && !csvImportModal.preview && !csvImportModal.validationError && (
                 <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-xs text-slate-300">
@@ -4669,7 +4655,7 @@ participants: [
                         {csvImportModal.importing ? (
                           <>Importing...</>
                         ) : (
-                          <>✓ Confirm Import {csvImportModal.preview.length} Team(s)</>
+                          <>✓ Confirm Import {xlsxSelectedRows.length} Team(s)</>
                         )}
                       </button>
                       <button
