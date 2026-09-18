@@ -4410,7 +4410,11 @@ const leaderParticipant: Participant = {
       } catch (storageError: any) {
         nextTeamNumber = previousNextTeamNumber;
         console.error("[DATABASE] Production XLSX import write failed:", storageError?.message || storageError);
-        return res.status(503).json({ success: false, error: "Production registration storage is temporarily unavailable; no rows were imported." });
+        return res.status(503).json({
+          success: false,
+          error: "Production registration storage is temporarily unavailable; no rows were imported.",
+          detail: String(storageError?.detail || storageError?.message || storageError?.code || "unknown database error")
+        });
       }
 
       teams.push(...pendingTeams);

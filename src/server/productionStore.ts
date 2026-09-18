@@ -172,9 +172,11 @@ function insertProductionTeamStatements(team: Team): PgQuery[] {
     VALUES (${team.id}, ${team.teamName}, ${team.teamName.trim().replace(/\s+/g, ' ').toLowerCase()}, ${team.leaderEmail}, ${team.preferredTrack}, ${JSON.stringify(team)}::jsonb)
   `];
   for (const participant of team.members) {
+    const participantEmail = participant.email.trim().toLowerCase() || `${participant.id.toLowerCase()}@import.invalid`;
+    const participantPhone = participant.phone.replace(/[^0-9]/g, '') || participant.id;
     statements.push(sql`
       INSERT INTO registration_participants (participant_id, team_id, email, usn, phone, participant_json)
-      VALUES (${participant.id}, ${team.id}, ${participant.email.trim().toLowerCase()}, ${(participant.usn || participant.id).trim().toUpperCase()}, ${participant.phone.replace(/[^0-9]/g, '')}, ${JSON.stringify(participant)}::jsonb)
+      VALUES (${participant.id}, ${team.id}, ${participantEmail}, ${(participant.usn || participant.id).trim().toUpperCase()}, ${participantPhone}, ${JSON.stringify(participant)}::jsonb)
     `);
   }
   return statements;
@@ -212,7 +214,7 @@ export async function saveProductionTeam(team: Team): Promise<void> {
     sql`DELETE FROM registration_participants WHERE team_id = ${team.id}`,
     ...team.members.map((participant) => sql`
       INSERT INTO registration_participants (participant_id, team_id, email, usn, phone, participant_json)
-      VALUES (${participant.id}, ${team.id}, ${participant.email.trim().toLowerCase()}, ${(participant.usn || participant.id).trim().toUpperCase()}, ${participant.phone.replace(/[^0-9]/g, '')}, ${JSON.stringify(participant)}::jsonb)
+      VALUES (${participant.id}, ${team.id}, ${participant.email.trim().toLowerCase() || `${participant.id.toLowerCase()}@import.invalid`}, ${(participant.usn || participant.id).trim().toUpperCase()}, ${participant.phone.replace(/[^0-9]/g, '') || participant.id}, ${JSON.stringify(participant)}::jsonb)
     `)
   ]);
 }
