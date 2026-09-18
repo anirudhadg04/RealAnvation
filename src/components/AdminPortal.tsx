@@ -1271,12 +1271,17 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
     const timeout = window.setTimeout(() => controller.abort(), 30000);
     try {
       const payload = buildXlsxImportPayload(xlsxImportData);
+      const selected = new Set(xlsxSelectedRows);
+      const selectedRows = payload.rows.filter((_: any, index: number) => selected.has(index + 1));
+      if (selectedRows.length === 0) {
+        throw new Error('Select at least one valid team before confirming the import.');
+      }
       const res = await fetch('/api/admin/import-xlsx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         signal: controller.signal,
-        body: JSON.stringify({ ...payload, confirm: true, selectedRowIndices: xlsxSelectedRows, importStatus: xlsxImportStatus })
+        body: JSON.stringify({ rows: selectedRows, confirm: true, importStatus: xlsxImportStatus })
       });
       if (!res.ok) {
         const text = await res.text();
