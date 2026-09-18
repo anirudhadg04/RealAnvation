@@ -1299,16 +1299,16 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
     if (missingColumns.length) {
       throw new Error(`This is not the expected Google Forms workbook. Missing required column(s): ${missingColumns.join(", ")}.`);
     }
-    const getCell = (row: any, column: number) => {
+const getCell = (row: any, column: number) => {
       const value = String(row[`col_${column}`] ?? "").trim();
-      return value || "—";
+      return value || "-";
     };
 
     const dataRows: any[] = [];
-    for (let i = 1; i < rows.length; i++) {
+for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
       const teamName = getCell(row, col.teamName);
-      if (teamName === '—') continue;
+      if (teamName === '-') continue;
       dataRows.push({
       team_name:           teamName,
       domain:              getCell(row, col.domain),
@@ -1326,11 +1326,11 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         phone:       getCell(row, col.leaderPhone),
         gender:      getCell(row, col.leaderGender),
       },
-      participants: [
+participants: [
         { full_name: getCell(row, col.p2Name), department: getCell(row, col.p2Department), semester: getCell(row, col.p2Semester), email: getCell(row, col.p2Email), phone: getCell(row, col.p2Phone), gender: getCell(row, col.p2Gender) },
         { full_name: getCell(row, col.p3Name), department: getCell(row, col.p3Department), semester: getCell(row, col.p3Semester), email: getCell(row, col.p3Email), phone: getCell(row, col.p3Phone), gender: getCell(row, col.p3Gender) },
         // The source has no Participant 4 name cell in the approved mapping.
-        { full_name: '—', department: getCell(row, col.p4Department), semester: getCell(row, col.p4Semester), email: getCell(row, col.p4Email), phone: getCell(row, col.p4Phone), gender: getCell(row, col.p4Gender) },
+        { full_name: '-', department: getCell(row, col.p4Department), semester: getCell(row, col.p4Semester), email: getCell(row, col.p4Email), phone: getCell(row, col.p4Phone), gender: getCell(row, col.p4Gender) },
       ],
       payment: {
         utr: getCell(row, col.utr),
@@ -4607,7 +4607,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
                                     <div key={idx}>• {err}</div>
                                   ))}
                                 </div>
-                              ) : '—'}
+                              ) : '-'}
                             </td>
                           </tr>
                         ))}
@@ -4651,40 +4651,40 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         )}
 
        {/* DELETE CONFIRMATION MODAL */}
-       {deleteConfirmTeam && (
-         <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label="Confirm team deletion">
-           <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-red-500/40 shadow-2xl p-6 space-y-4">
-             <div className="flex items-center gap-3">
-               <div className="w-10 h-10 rounded-full bg-red-950 border border-red-500/50 flex items-center justify-center">
-                 <Trash2 className="w-5 h-5 text-red-400" />
-               </div>
-               <div>
-                 <h3 className="text-base font-black text-white">Permanently Delete Team?</h3>
-                 <p className="text-xs text-slate-400">This action cannot be undone.</p>
-               </div>
-             </div>
-             <p className="text-sm text-slate-300">
-               Are you sure you want to delete <strong className="text-white">"{deleteConfirmTeam.teamName}"</strong>? All participant data for this team will be permanently removed.
-             </p>
-             <div className="flex items-center gap-3 pt-2">
-               <button
-                 type="button"
-                 onClick={confirmDeleteTeam}
-                 className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm shadow-lg"
-               >
-                 Yes, Delete Permanently
-               </button>
-               <button
-                 type="button"
-                 onClick={() => setDeleteConfirmTeam(null)}
-                 className="px-5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 text-sm font-bold hover:bg-slate-900 hover:text-slate-200 transition-colors"
-               >
-                 No, Cancel
-               </button>
-             </div>
-           </div>
-         </div>
-       )}
+{deleteConfirmTeam && (
+          <div className="fixed inset-0 z-[140] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label="Confirm team deletion">
+            <div className="w-full max-w-md rounded-3xl bg-slate-900 border border-red-500/40 shadow-2xl p-6 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-red-950 border border-red-500/50 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-400" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-white">Permanently Remove Team?</h3>
+                  <p className="text-xs text-slate-400">This action cannot be undone.</p>
+                </div>
+              </div>
+              <p className="text-sm text-slate-300">
+                Are you sure you want to permanently remove this team from the ledger?
+              </p>
+              <div className="flex items-center gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={confirmDeleteTeam}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-sm shadow-lg"
+                >
+                  Delete
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDeleteConfirmTeam(null)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 text-sm font-bold hover:bg-slate-900 hover:text-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
      </div>
      );
    };

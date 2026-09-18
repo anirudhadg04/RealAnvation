@@ -1505,7 +1505,7 @@ export async function startServer(options: { listen?: boolean } = {}) {
      const from = String(process.env.MAIL_FROM);
      const subject = `Anvation Registration Approved – Team ${team.id}`;
      const appUrl = String(process.env.PARTICIPANT_PORTAL_URL || process.env.PUBLIC_APP_URL || "https://real-anvation.vercel.app/participant");
-     const teamDetails = team.members.map((member) => `${member.fullName || "—"} (${member.role})`).join(", ");
+     const teamDetails = team.members.map((member) => `${member.fullName || "-"} (${member.role})`).join(", ");
      const text = `Your Anvation registration has been approved.\n\nTeam ID: ${team.id}\nLogin ID: ${team.id}\nPassword: ${password}\n\nParticipant portal: ${appUrl}\n\nTeam members: ${teamDetails}\n\nYour Gate Entry QR is attached and shown inline. It contains only Team ID ${team.id}.`;
      const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:auto"><h2>ANVATION 2026 registration approved</h2><p>Hello ${escapeHtml(team.members[0]?.fullName || "Participant")},</p><p><strong>Team ID:</strong> ${escapeHtml(team.id)}<br/><strong>Login ID:</strong> ${escapeHtml(team.id)}<br/><strong>Password:</strong> ${escapeHtml(password)}</p><p>Use these credentials at <a href="${escapeHtml(appUrl)}">the participant portal</a>.</p><p><strong>Team:</strong> ${escapeHtml(teamDetails)}</p><div style="text-align:center;margin:20px 0"><img src="cid:anvation-team-qr" width="180" height="180" alt="Gate Entry QR for team ${escapeHtml(team.id)}"/><p style="font-size:12px;color:#475569">Show this QR at KSSEM Gate Check-in.</p></div></div>`;
 
@@ -3313,14 +3313,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
   });
 
 app.post("/api/admin/logout", (req, res) => {
-  const secure = process.env.NODE_ENV === "production";
-  res.cookie(AUTH_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure,
-    expires: new Date(0),
-    path: "/",
-  });
+  clearAuthCookie(res);
   res.json({ success: true, message: "Logged out." });
 });
 
@@ -4153,12 +4146,12 @@ auditLogs.unshift({
 
         const amount = numTeammates * 250;
 
-        preview.push({
+preview.push({
           rowIndex,
-          teamName: normTeamName || "—",
-          leaderEmail: normLeaderEmail || "—",
+          teamName: normTeamName || "-",
+          leaderEmail: normLeaderEmail || "-",
           amount: `₹${amount}`,
-          utr: normUtr || "—",
+          utr: normUtr || "-",
           participantCount: numTeammates || 0,
           status: errors.length > 0 ? 'Invalid' : 'Valid',
           errors,
@@ -4240,17 +4233,17 @@ auditLogs.unshift({
         const teamIndex = ++nextTeamNumber;
         const teamId = `AN-${String(teamIndex).padStart(3, '0')}`;
 
-        const leaderParticipant: Participant = {
+const leaderParticipant: Participant = {
           id: `p-${teamIndex}-1`,
-          fullName: sanitizeInputString(norm(rd.leaderFullName)) || '—',
-          college: sanitizeInputString(norm(rd.college)) || '—',
-          state: sanitizeInputString(norm(rd.state)) || '—',
+          fullName: sanitizeInputString(norm(rd.leaderFullName)) || '-',
+          college: sanitizeInputString(norm(rd.college)) || '-',
+          state: sanitizeInputString(norm(rd.state)) || '-',
           email: norm(rd.leaderEmail),
           phone: sanitizeInputString(norm(rd.leaderPhone)),
           usn: '',
           gender: sanitizeInputString(norm(rd.leaderGender)),
-          department: sanitizeInputString(norm(rd.leaderDepartment)) || '—',
-          semester: sanitizeInputString(norm(rd.leaderSemester)) || '—',
+          department: sanitizeInputString(norm(rd.leaderDepartment)) || '-',
+          semester: sanitizeInputString(norm(rd.leaderSemester)) || '-',
           role: 'Leader',
           teamId,
           accommodationRequired: accRequired,
@@ -4271,15 +4264,15 @@ auditLogs.unshift({
           const p = participantDefs[j];
           members.push({
             id: `p-${teamIndex}-${j + 2}`,
-            fullName: sanitizeInputString(norm(p.name)) || '—',
-            college: sanitizeInputString(norm(rd.college)) || '—',
-            state: sanitizeInputString(norm(rd.state)) || '—',
+            fullName: sanitizeInputString(norm(p.name)) || '-',
+            college: sanitizeInputString(norm(rd.college)) || '-',
+            state: sanitizeInputString(norm(rd.state)) || '-',
             email: norm(p.email),
             phone: sanitizeInputString(norm(p.phone)),
             usn: '',
             gender: sanitizeInputString(norm(p.gender)),
-            department: sanitizeInputString(norm(p.department)) || '—',
-            semester: sanitizeInputString(norm(p.semester)) || '—',
+            department: sanitizeInputString(norm(p.department)) || '-',
+            semester: sanitizeInputString(norm(p.semester)) || '-',
             role: 'Member',
             teamId,
             accommodationRequired: accRequired,
