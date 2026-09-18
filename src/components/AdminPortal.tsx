@@ -417,6 +417,10 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
     setIsAuthenticated(false);
     setInputPassword('');
     setAuthError('');
+    if (window.history && window.history.pushState) {
+      window.history.pushState({}, '', '/');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
     showToast('Super Admin Session Terminated.');
   };
 
@@ -1291,7 +1295,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       leaderEmail: 12, leaderPhone: 13, leaderGender: 14, participantCount: 16,
       p2Name: 38, p2Department: 39, p2Semester: 40, p2Email: 41, p2Phone: 42, p2Gender: 43,
       p3Name: 45, p3Department: 46, p3Semester: 47, p3Email: 48, p3Phone: 49, p3Gender: 50,
-      p4Department: 53, p4Semester: 54, p4Email: 55, p4Phone: 56, p4Gender: 57,
+      p4Name: 52, p4Department: 53, p4Semester: 54, p4Email: 55, p4Phone: 56, p4Gender: 57,
       utr: 69,
     } as const;
     const missingColumns = ["Team Name (B)", "Team Leader Full Name (I)", "Transaction ID / UTR (BQ)"]
@@ -1329,8 +1333,7 @@ for (let i = 1; i < rows.length; i++) {
 participants: [
         { full_name: getCell(row, col.p2Name), department: getCell(row, col.p2Department), semester: getCell(row, col.p2Semester), email: getCell(row, col.p2Email), phone: getCell(row, col.p2Phone), gender: getCell(row, col.p2Gender) },
         { full_name: getCell(row, col.p3Name), department: getCell(row, col.p3Department), semester: getCell(row, col.p3Semester), email: getCell(row, col.p3Email), phone: getCell(row, col.p3Phone), gender: getCell(row, col.p3Gender) },
-        // The source has no Participant 4 name cell in the approved mapping.
-        { full_name: '-', department: getCell(row, col.p4Department), semester: getCell(row, col.p4Semester), email: getCell(row, col.p4Email), phone: getCell(row, col.p4Phone), gender: getCell(row, col.p4Gender) },
+        { full_name: getCell(row, col.p4Name), department: getCell(row, col.p4Department), semester: getCell(row, col.p4Semester), email: getCell(row, col.p4Email), phone: getCell(row, col.p4Phone), gender: getCell(row, col.p4Gender) },
       ],
       payment: {
         utr: getCell(row, col.utr),
@@ -1462,22 +1465,22 @@ participants: [
               </button>
             </form>
 
-            {/* Default Access Credentials */}
+            {/* Environment-driven admin access */}
             <div className="space-y-2">
               <p className="text-[11px] font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2">
-                <Key className="w-3.5 h-3.5" /> Default Access Credentials
+                <Key className="w-3.5 h-3.5" /> Environment Configuration
               </p>
               <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs space-y-1.5">
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-400">Username / Email</span>
-                  <code className="text-cyan-300 font-mono">superadmin</code>
+                  <span className="text-slate-400">Username</span>
+                  <code className="text-cyan-300 font-mono">Any username</code>
                 </div>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-slate-400">Default Password</span>
-                  <code className="text-cyan-300 font-mono">AnvationAdmin@2026!</code>
+                  <span className="text-slate-400">Password</span>
+                  <code className="text-cyan-300 font-mono">Server-side ADMIN_BOOTSTRAP_PASSWORD</code>
                 </div>
                 <p className="text-[10px] text-slate-500 pt-1.5 mt-1 border-t border-slate-800">
-                  Override via the <code className="text-slate-300">ADMIN_BOOTSTRAP_PASSWORD</code> env var. Change it after your first sign-in.
+                  The bootstrap password is validated only on the server and is never exposed to the frontend.
                 </p>
               </div>
             </div>

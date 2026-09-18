@@ -278,6 +278,8 @@ async function run() {
   await startServer();
 }
 
+export function startServer(options: { listen: false }): Promise<express.Express>;
+export function startServer(options?: { listen?: boolean }): Promise<express.Express | httpx.Server>;
 export async function startServer(options: { listen?: boolean } = {}) {
   const app = express();
   const requestedPort = PUBLIC_PORT;
@@ -444,6 +446,7 @@ export async function startServer(options: { listen?: boolean } = {}) {
   const AUTH_COOKIE = "anvation_session";
   const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
   const SESSION_SECRET = process.env.SESSION_SECRET || "default-secret-change-in-production";
+  const activeSessions = new Map<string, number>();
   const DEFAULT_ADMIN_PASSWORD = resolveAdminBootstrapPassword(process.env);
   if (process.env.VERCEL && !process.env.ADMIN_BOOTSTRAP_PASSWORD) {
     console.warn("[AUTH] ADMIN_BOOTSTRAP_PASSWORD missing in Vercel; using built-in fallback to keep admin login active.");
@@ -532,8 +535,28 @@ export async function startServer(options: { listen?: boolean } = {}) {
   }
 
   function createSession(user: any) {
-    const record = { user: { ...user, expiresAt: Date.now() + SESSION_TTL_MS }, expiresAt: Date.now() + SESSION_TTL_MS };
+    const expiresAt = Date.now() + SESSION_TTL_MS;
+    const sessionId = `sess_${crypto.randomBytes(16).toString("hex")}`;
+    const record = { sessionId, user: { ...user, expiresAt }, expiresAt };
+    activeSessions.set(sessionId, expiresAt);
     return signSession(record);
+  }
+
+  function revokeSession(token: string | null) {
+    if (!token) return false;
+    try {
+      const [payload] = token.split(".");
+      if (!payload) return false;
+      const data = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+      const sessionId = data?.sessionId;
+      if (sessionId) {
+        activeSessions.delete(sessionId);
+        return true;
+      }
+    } catch {
+      // Invalid/old session tokens are harmless to discard.
+    }
+    return false;
   }
 
   function getSessionFromRequest(req: any) {
@@ -543,6 +566,17 @@ export async function startServer(options: { listen?: boolean } = {}) {
     if (!token) return null;
     const session = verifySession(token);
     if (!session) return null;
+    const sessionId = session.sessionId;
+    if (!sessionId) return null;
+    const expiresAt = activeSessions.get(sessionId);
+    if (typeof expiresAt !== "number") {
+      activeSessions.delete(sessionId);
+      return null;
+    }
+    if (Date.now() > expiresAt) {
+      activeSessions.delete(sessionId);
+      return null;
+    }
     return session;
   }
 
@@ -559,11 +593,10 @@ export async function startServer(options: { listen?: boolean } = {}) {
 
 function clearAuthCookie(res: any) {
   const secure = process.env.NODE_ENV === "production";
-  res.cookie(AUTH_COOKIE, "", {
+  res.clearCookie(AUTH_COOKIE, {
     httpOnly: true,
     sameSite: "lax",
     secure,
-    maxAge: 0,
     path: "/",
   });
 }
@@ -1039,12 +1072,13 @@ function clearAuthCookie(res: any) {
 
   // Idempotency cache for registration requests (5 min TTL)
   const idempotencyStore = new Map<string, { status: number; body: any; expiresAt: number }>();
-  setInterval(() => {
+  const idempotencyCleanupTimer = setInterval(() => {
     const now = Date.now();
     for (const [key, val] of idempotencyStore.entries()) {
       if (now > val.expiresAt) idempotencyStore.delete(key);
     }
   }, 60000);
+  idempotencyCleanupTimer.unref();
 
   // In-Memory Mutex for serializing registration critical sections
   let registrationMutex: Promise<any> = Promise.resolve();
@@ -2617,6 +2651,8 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
    // Delete Team Endpoint
    app.delete("/api/teams/:id", requireSuperAdmin, async (req, res) => {
      const { id } = req.params;
+     const previousTeams = teams;
+     const targetTeam = teams.find(t => t.id.toLowerCase() === id.toLowerCase() || (t.regNumber || '').toLowerCase() === id.toLowerCase());
      const initialLen = teams.length;
      teams = teams.filter(t => t.id.toLowerCase() !== id.toLowerCase() && (t.regNumber || '').toLowerCase() !== id.toLowerCase());
      if (teams.length === initialLen) {
@@ -2624,16 +2660,21 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
      }
      if (productionStoreEnabled) {
        try {
-         await invalidateQrToken(id);
-         await deleteProductionTeam(id);
+         await invalidateQrToken(targetTeam?.id || id);
+         await deleteProductionTeam(targetTeam?.id || id);
        } catch (e) {
          console.error('[DELETE] productionStore delete failed:', e);
+         teams = previousTeams;
+         rebuildUniquenessIndexes();
          return res.status(500).json({ success: false, error: 'Failed to delete team from database. Please try again or contact support.' });
        }
+     } else if (!persistNow()) {
+       teams = previousTeams;
+       rebuildUniquenessIndexes();
+       return res.status(500).json({ success: false, error: 'Failed to persist team deletion. Please try again.' });
      }
      rebuildUniquenessIndexes();
      res.json({ success: true, message: "Team deleted successfully" });
-     markDirty();
    });
 
   // Edit / Update Individual Participant Endpoint
@@ -3150,8 +3191,14 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
         password: normalizeStoredPassword(user.password)
       }));
       const payload = JSON.stringify({ teams: sanitizedTeams, adminUsers: normalizedAdminUsers, checkpoints, auditLogs, nextTeamNumber }, null, 2);
-      const tmpFile = `${DATA_FILE}.tmp`;
+      const tmpFile = path.join(DATA_DIRECTORY, `server-data-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.json.tmp`);
       fs.writeFileSync(tmpFile, payload, "utf-8");
+      try {
+        fs.rmSync(DATA_FILE, { force: true });
+      } catch {
+        // Some Windows filesystems reject rename-over-existing-file behavior with EPERM,
+        // so we remove the existing target first and then move the fresh snapshot into place.
+      }
       fs.renameSync(tmpFile, DATA_FILE);
       return true;
     } catch (e) {
@@ -3201,7 +3248,8 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     // without taking the entire site down.
     console.error("[BACKUP] Could not initialise participant registration CSV:", backupError);
   }
-  setInterval(persistNow, 5000);
+  const persistenceTimer = setInterval(persistNow, 5000);
+  persistenceTimer.unref();
 
   // Rulebook Versions
   let rulebooks: RulebookVersion[] = [
@@ -3320,8 +3368,12 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
   });
 
 app.post("/api/admin/logout", (req, res) => {
+  const cookieRaw = req.headers.cookie || "";
+  const match = cookieRaw.split(";").map((value: string) => value.trim()).find((value: string) => value.startsWith(`${AUTH_COOKIE}=`));
+  const token = match ? decodeURIComponent(match.slice(AUTH_COOKIE.length + 1)) : null;
+  revokeSession(token);
   clearAuthCookie(res);
-  res.json({ success: true, message: "Logged out." });
+  return res.json({ success: true, message: "Logged out." });
 });
 
   app.post("/api/admin-users", requireSuperAdmin, (req, res) => {
@@ -3975,7 +4027,14 @@ auditLogs.unshift({
         return res.status(413).json({ success: false, error: "This import has too many rows. Split the workbook into batches of 500 teams or fewer." });
       }
 
-      const dataRows = body.rows;
+      const dataRows = body.rows.filter((row: any) => {
+        if (!row || typeof row !== 'object') return false;
+        const teamName = String(row.team_name ?? '').trim();
+        return teamName !== '' && teamName !== '-';
+      });
+      if (dataRows.length === 0) {
+        return res.status(400).json({ success: false, error: "No non-empty team rows were found in the XLSX payload." });
+      }
       const validDomains = new Set(HACKATHON_TRACKS.map((t) => t.title));
 
       interface PreviewRow {
