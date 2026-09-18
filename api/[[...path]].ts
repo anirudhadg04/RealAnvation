@@ -1,3 +1,3 @@
-import vercelHandler from '../server';
+import handler from '../dist/server.cjs';
 
-export default vercelHandler;
+export default handler;
