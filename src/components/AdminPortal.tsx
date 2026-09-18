@@ -1164,6 +1164,8 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   const [xlsxImportData, setXlsxImportData] = useState<any[] | null>(null);
   const [xlsxImportError, setXlsxImportError] = useState<string | null>(null);
   const [xlsxValidating, setXlsxValidating] = useState(false);
+  const [xlsxImportStatus, setXlsxImportStatus] = useState<'PENDING_PAYMENT_AUDIT' | 'APPROVED' | 'REJECTED'>('PENDING_PAYMENT_AUDIT');
+  const [xlsxExistingTeamMode, setXlsxExistingTeamMode] = useState<'skip' | 'update-status'>('skip');
   const csvFileRef = React.useRef<HTMLInputElement>(null);
 
   const handleXlsxFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1227,7 +1229,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ ...payload, importStatus: xlsxImportStatus, existingTeamMode: xlsxExistingTeamMode })
       });
       if (!res.ok) {
         const text = await res.text();
@@ -1264,7 +1266,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ ...payload, confirm: true })
+        body: JSON.stringify({ ...payload, confirm: true, importStatus: xlsxImportStatus, existingTeamMode: xlsxExistingTeamMode })
       });
       if (!res.ok) {
         const text = await res.text();
@@ -1272,7 +1274,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       }
       const data = await res.json();
       if (data.success) {
-        showToast(`✓ Imported ${data.count} team(s) into PENDING_PAYMENT_AUDIT flow.`);
+        showToast(`✓ Imported ${data.count || 0} new/updated team(s); skipped ${data.skippedCount || 0} existing team(s).`);
         setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false });
         setXlsxImportData(null);
         fetchAdminData();
@@ -4535,6 +4537,34 @@ participants: [
               {csvImportModal.file && (
                 <div className="p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300">
                   Selected file: <span className="font-bold text-white">{csvImportModal.file.name}</span>
+                </div>
+              )}
+
+              {csvImportModal.file && !csvImportModal.preview && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-950 border border-slate-800">
+                  <label className="text-xs text-slate-300">
+                    Status for new teams
+                    <select
+                      value={xlsxImportStatus}
+                      onChange={(event) => setXlsxImportStatus(event.target.value as typeof xlsxImportStatus)}
+                      className="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-white"
+                    >
+                      <option value="PENDING_PAYMENT_AUDIT">Pending payment audit</option>
+                      <option value="APPROVED">Approved</option>
+                      <option value="REJECTED">Rejected</option>
+                    </select>
+                  </label>
+                  <label className="text-xs text-slate-300">
+                    Existing teams in this sheet
+                    <select
+                      value={xlsxExistingTeamMode}
+                      onChange={(event) => setXlsxExistingTeamMode(event.target.value as typeof xlsxExistingTeamMode)}
+                      className="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-white"
+                    >
+                      <option value="skip">Skip existing teams</option>
+                      <option value="update-status">Update existing team status</option>
+                    </select>
+                  </label>
                 </div>
               )}
 

@@ -2664,13 +2664,13 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
      }
      if (productionStoreEnabled) {
        try {
-         await invalidateQrToken(targetTeam?.id || id);
          await deleteProductionTeam(targetTeam?.id || id);
        } catch (e) {
          console.error('[DELETE] productionStore delete failed:', e);
          teams = previousTeams;
          rebuildUniquenessIndexes();
-         return res.status(500).json({ success: false, error: 'Failed to delete team from database. Please try again or contact support.' });
+         const detail = e instanceof Error ? e.message : String(e);
+         return res.status(500).json({ success: false, error: 'Failed to delete team from database. Please try again or contact support.', detail });
        }
      } else if (!persistNow()) {
        teams = previousTeams;
@@ -4023,6 +4023,13 @@ auditLogs.unshift({
       if (!requireDurableTeamStore(res)) return;
       const body = req.body || {};
       const { confirm } = body;
+      const importStatus = String(body.importStatus || 'PENDING_PAYMENT_AUDIT').trim().toUpperCase();
+      const approvalStatus = importStatus === 'PENDING_PAYMENT_AUDIT' ? 'PENDING' : importStatus as 'APPROVED' | 'REJECTED';
+      const existingTeamMode = body.existingTeamMode === 'update-status' ? 'update-status' : 'skip';
+      const allowedImportStatuses = new Set(['PENDING_PAYMENT_AUDIT', 'APPROVED', 'REJECTED']);
+      if (!allowedImportStatuses.has(importStatus)) {
+        return res.status(400).json({ success: false, error: 'Invalid import status. Choose PENDING_PAYMENT_AUDIT, APPROVED, or REJECTED.' });
+      }
 
       if (!Array.isArray(body.rows) || body.rows.length === 0) {
         return res.status(400).json({ success: false, error: "XLSX payload (rows) is required." });
@@ -4058,6 +4065,8 @@ auditLogs.unshift({
       const importPhones = new Set<string>();
       const importUtrs = new Set<string>();
       const importTeamNames = new Set<string>();
+      const existingTeams = productionStoreEnabled ? await loadProductionTeams() : teams;
+      const existingTeamsByName = new Map(existingTeams.map((team) => [normalizeTeamName(team.teamName), team]));
 
       for (let i = 0; i < dataRows.length; i++) {
         const row = dataRows[i];
@@ -4235,9 +4244,17 @@ preview.push({
       for (const p of preview) {
         if (p.status !== 'Valid') continue;
         const rd = p.rowData!;
-        if (rd.teamName && registeredTeamNames.has(normalizeTeamName(rd.teamName))) {
-          p.errors.push(`Team name "${rd.teamName}" already exists in database.`);
-          p.status = 'Invalid';
+        const existingTeam = rd.teamName ? existingTeamsByName.get(normalizeTeamName(rd.teamName)) : undefined;
+        if (existingTeam) {
+          p.rowData.existingTeamId = existingTeam.id;
+          p.rowData.existingTeamStatus = existingTeam.approvalStatus || existingTeam.status || 'UNKNOWN';
+          p.rowData.existingTeamMode = existingTeamMode;
+          p.errors = [];
+          p.errors.push(existingTeamMode === 'update-status'
+            ? `Existing team ${existingTeam.id} will have its status updated.`
+            : `Existing team ${existingTeam.id} will be skipped.`);
+          p.status = 'Valid';
+          continue;
         }
         const participantDefs = [
           { email: rd.leaderEmail, phone: rd.leaderPhone, idx: 1 },
@@ -4279,16 +4296,36 @@ preview.push({
           success: true,
           valid: true,
           preview: preview.map(({ rowData, ...rest }) => rest),
-          message: `All ${preview.length} rows are valid. Confirm import to proceed.`,
+          message: `All ${preview.length} rows are valid. Existing teams will be ${existingTeamMode === 'update-status' ? 'updated' : 'skipped'}. Confirm import to proceed.`,
           canImport: true
         });
       }
 
       const importedTeams: any[] = [];
       const pendingTeams: Team[] = [];
+      const updatedExistingTeams: Team[] = [];
       const previousNextTeamNumber = nextTeamNumber;
       for (let i = 0; i < dataRows.length; i++) {
         const rd = preview[i].rowData!;
+        if (rd.existingTeamId) {
+          const existingTeam = existingTeamsByName.get(normalizeTeamName(rd.teamName));
+          if (existingTeam && existingTeamMode === 'update-status') {
+            const statusPatch: Partial<Team> = {
+              status: importStatus as Team['status'],
+              approvalStatus,
+              paymentStatus: importStatus === 'APPROVED' ? 'PAYMENT_APPROVED' : importStatus === 'REJECTED' ? 'REJECTED' : 'PENDING_PAYMENT_AUDIT'
+            };
+            const updatedExisting = { ...existingTeam, ...statusPatch };
+            updatedExistingTeams.push(updatedExisting);
+          }
+          importedTeams.push({
+            id: existingTeam?.id || rd.existingTeamId,
+            teamName: rd.teamName,
+            skipped: existingTeamMode !== 'update-status',
+            updated: existingTeamMode === 'update-status'
+          });
+          continue;
+        }
         const norm = (v: any) => {
           const s = String(v || "").trim();
           return s === '-' || s === '—' ? '' : s;
@@ -4355,14 +4392,14 @@ const leaderParticipant: Participant = {
           domain: sanitizeInputString(norm(rd.domain)),
           preferredTrack: sanitizeInputString(norm(rd.domain)),
           members: [leaderParticipant, ...members],
-          status: 'PENDING_PAYMENT_AUDIT' as any,
+          status: importStatus as any,
           createdAt: new Date().toISOString(),
           projectSubmitted: false,
           paymentUtr: norm(rd.utr),
-          paymentStatus: 'PENDING_PAYMENT_AUDIT' as any,
+          paymentStatus: importStatus === 'APPROVED' ? 'PAYMENT_APPROVED' : importStatus === 'REJECTED' ? 'REJECTED' : 'PENDING_PAYMENT_AUDIT' as any,
           paymentAmountDetail: `Pending admin payment audit for ${numTeammates * (cmsConfig.registrationFee || 250)} INR`,
           credentialDeliveryStatus: 'queued',
-          approvalStatus: 'PENDING',
+          approvalStatus,
           approvalTimestamp: '',
           approvalEmailStatus: 'PENDING',
           approvalEmailSentAt: ''
@@ -4379,7 +4416,10 @@ const leaderParticipant: Participant = {
       }
 
       try {
-        if (productionStoreEnabled) await saveProductionTeams(pendingTeams);
+        if (productionStoreEnabled) {
+          for (const existingTeam of updatedExistingTeams) await updateProductionTeam(existingTeam);
+          await saveProductionTeams(pendingTeams);
+        }
       } catch (storageError: any) {
         nextTeamNumber = previousNextTeamNumber;
         console.error("[DATABASE] Production XLSX import write failed:", storageError?.message || storageError);
@@ -4387,6 +4427,10 @@ const leaderParticipant: Participant = {
       }
 
       teams.push(...pendingTeams);
+      for (const updatedExisting of updatedExistingTeams) {
+        const index = teams.findIndex((team) => team.id === updatedExisting.id);
+        if (index >= 0) teams[index] = updatedExisting;
+      }
       rebuildUniquenessIndexes();
       if (!productionStoreEnabled && !persistNow()) {
         teams.splice(teams.length - pendingTeams.length, pendingTeams.length);
@@ -4401,13 +4445,18 @@ const leaderParticipant: Participant = {
         }
       }
 
+      const newlyImportedCount = importedTeams.filter((team) => !team.skipped && !team.updated).length;
+      const updatedExistingCount = importedTeams.filter((team) => team.updated).length;
+      const skippedExistingCount = importedTeams.filter((team) => team.skipped).length;
       return res.json({
         success: true,
         valid: true,
         imported: true,
-        count: importedTeams.length,
+        count: newlyImportedCount + updatedExistingCount,
+        skippedCount: skippedExistingCount,
+        updatedCount: updatedExistingCount,
         teams: importedTeams,
-        message: `Successfully imported ${importedTeams.length} team(s). All entered PENDING_PAYMENT_AUDIT flow.`
+        message: `Imported ${newlyImportedCount} new team(s), updated ${updatedExistingCount} existing team(s), and skipped ${skippedExistingCount} existing team(s).`
       });
     } catch (err: any) {
       console.error("[XLSX IMPORT ERROR]", err);

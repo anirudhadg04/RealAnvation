@@ -236,8 +236,8 @@ export async function deleteProductionTeam(teamId: string): Promise<void> {
   if (!productionStoreEnabled) throw new Error('DATABASE_URL is required for production registration storage.');
   await ensureProductionSchema();
   await sql.transaction([
-    sql`DELETE FROM registration_participants WHERE team_id = ${teamId}`,
-    sql`DELETE FROM registrations WHERE team_id = ${teamId}`
+    sql`DELETE FROM registration_participants WHERE LOWER(team_id) = LOWER(${teamId})`,
+    sql`DELETE FROM registrations WHERE LOWER(team_id) = LOWER(${teamId})`
   ]);
 }
 
