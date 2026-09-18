@@ -233,7 +233,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       amount: string;
       utr: string;
       participantCount: number;
-      status: 'Valid' | 'Invalid' | 'Skipped';
+      status: 'Valid' | 'Invalid' | 'Duplicate' | 'Skipped';
       errors: string[];
     }> | null;
     validationError: string | null;
@@ -1178,6 +1178,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       e.target.value = '';
       return;
     }
+    setXlsxSelectedRows([]);
     setXlsxImportError(null);
     setXlsxValidating(true);
     try {
@@ -1283,6 +1284,8 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         showToast(`✓ Imported ${data.count || 0} new/updated team(s); skipped ${data.skippedCount || 0} existing team(s).`);
         setCsvImportModal({ open: false, file: null, preview: null, validationError: null, importing: false });
         setXlsxImportData(null);
+        setXlsxSelectedRows([]);
+        if (csvFileRef.current) csvFileRef.current.value = '';
         fetchAdminData();
       } else {
         setCsvImportModal(prev => ({
@@ -4602,7 +4605,7 @@ participants: [
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
                         {csvImportModal.preview.map((row) => (
-                          <tr key={row.rowIndex} className={row.status === 'Invalid' ? 'bg-red-950/20' : 'bg-slate-950/50'}>
+                          <tr key={row.rowIndex} className={row.status === 'Invalid' ? 'bg-red-950/20' : row.status === 'Duplicate' ? 'bg-amber-950/20' : 'bg-slate-950/50'}>
                             <td className="p-2">
                               <input
                                 type="checkbox"
@@ -4623,6 +4626,8 @@ participants: [
                               <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
                                 row.status === 'Valid'
                                   ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                  : row.status === 'Duplicate'
+                                    ? 'bg-amber-950 text-amber-300 border border-amber-800'
                                   : row.status === 'Skipped'
                                     ? 'bg-slate-900 text-slate-500 border border-slate-700'
                                   : 'bg-red-950 text-red-400 border border-red-800'

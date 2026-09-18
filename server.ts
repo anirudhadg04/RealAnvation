@@ -4059,7 +4059,7 @@ auditLogs.unshift({
         amount: string;
         utr: string;
         participantCount: number;
-        status: 'Valid' | 'Invalid' | 'Skipped';
+        status: 'Valid' | 'Invalid' | 'Duplicate' | 'Skipped';
         errors: string[];
         rowData?: any;
       }
@@ -4257,6 +4257,8 @@ preview.push({
         if (existingTeam) {
           p.errors.push(`Team name "${rd.teamName}" already exists in database.`);
           p.status = 'Invalid';
+          p.status = 'Duplicate';
+          continue;
         }
         const participantDefs = [
           { email: rd.leaderEmail, phone: rd.leaderPhone, idx: 1 },
