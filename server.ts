@@ -17,7 +17,7 @@ import { SEED_ANNOUNCEMENTS, SPONSORS } from "./src/data/mockData";
 import { Team, ProjectSubmission, JudgeScorecard, Announcement, SupportTicket, Participant, MilestoneReport, MentorBooking, WebsiteCMSConfig, AuditLog, AdminUser, AdminRole, RulebookVersion, EmailCampaign, RoomAllocation, JudgingRound, ScheduleItem, Checkpoint, Sponsor } from "./src/types";
 import { HACKATHON_TRACKS } from "./src/data/mockData";
 import { PAYMENT_UPI_ID, ocrContainsTransactionId } from "./src/utils/upiVerification";
-import { ensureProductionSchema, findProductionDuplicate, loadProductionTeams, productionStoreEnabled, saveProductionTeam, saveProductionTeams, updateProductionTeam, getProductionTeam, updateProductionTeamAudit, verifyQrToken, checkInTeam } from "./src/server/productionStore";
+import { ensureProductionSchema, findProductionDuplicate, loadProductionTeams, productionStoreEnabled, saveProductionTeam, saveProductionTeams, updateProductionTeam, getProductionTeam, updateProductionTeamAudit, deleteProductionTeam, invalidateQrToken, verifyQrToken, checkInTeam } from "./src/server/productionStore";
 import { resolveAdminBootstrapPassword } from "./src/utils/adminAuth";
 
 const execFileAsync = promisify(execFile);
@@ -1735,10 +1735,12 @@ export async function startServer(options: { listen?: boolean } = {}) {
   });
 
   // Return only the current session identity so the client can gate the admin view.
-  // Privileged API routes still enforce authorization independently with middleware.
+  // Does NOT create a new session — only validates existing cookie.
   app.get("/api/session", async (req, res) => {
     const session = getSessionFromRequest(req);
-    if (!session) return res.json({ authenticated: false });
+    if (!session) {
+      return res.json({ authenticated: false });
+    }
     if (!await allowParticipantSession(session, res)) return;
     const { id, type, role, teamId, email, username, name } = session.user;
     res.json({ authenticated: true, user: { id, type, role, teamId, email, username, name } });
@@ -3269,50 +3271,43 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     res.json({ success: true, users: adminUsers.map((user) => sanitizeAdminUser(user)) });
   });
 
-  // Admin Login — validates any provisioned admin user by username or email + password
+  // Admin Login — validates ADMIN_BOOTSTRAP_PASSWORD, accepts any username
   app.post("/api/admin-login", async (req, res) => {
     const { identifier, password } = req.body;
-    const idn = (identifier || '').trim().toLowerCase();
-    const pass = (password || '').trim();
-
-    if (!idn || !pass) {
+    
+    if (!identifier || !password) {
       return res.status(400).json({ success: false, error: "Username and password are required." });
     }
 
-    const user = adminUsers.find(
-      u => (u.username || '').toLowerCase() === idn || (u.email || '').toLowerCase() === idn
-    );
+    const expectedPassword = resolveAdminBootstrapPassword(process.env);
+    if (!expectedPassword) {
+      console.error("[AUTH] ADMIN_BOOTSTRAP_PASSWORD not configured");
+      return res.status(500).json({ success: false, error: "Authentication not configured." });
+    }
 
-    if (!user) {
-      return res.status(401).json({ success: false, error: "Invalid credentials." });
-    }
-    if (user.status !== 'Active') {
-      return res.status(403).json({ success: false, error: "This account has been suspended." });
-    }
-    if (!verifyPassword(pass, user.password)) {
+    if (password !== expectedPassword) {
       return res.status(401).json({ success: false, error: "Invalid credentials." });
     }
 
-    user.lastLogin = new Date().toISOString();
     const sid = createSession({
-      id: user.id,
+      id: 'admin-' + crypto.randomBytes(8).toString("hex"),
       type: 'admin',
-      role: user.role,
-      email: user.email,
-      username: user.username,
-      name: user.name,
+      role: 'SUPER_ADMIN',
+      email: identifier.includes('@') ? identifier : identifier + '@local',
+      username: identifier,
+      name: identifier,
     });
     setAuthCookie(res, sid);
     res.json({
       success: true,
       user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        username: user.username,
-        role: user.role,
-        status: user.status,
-        twoFactorEnabled: user.twoFactorEnabled
+        id: 'admin-' + crypto.randomBytes(8).toString("hex"),
+        email: identifier.includes('@') ? identifier : identifier + '@local',
+        name: identifier,
+        username: identifier,
+        role: 'SUPER_ADMIN',
+        status: 'Active',
+        twoFactorEnabled: false
       }
     });
   });

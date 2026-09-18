@@ -408,7 +408,12 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
     }
   };
 
-  const handleAdminLogout = () => {
+  const handleAdminLogout = async () => {
+    try {
+      await fetch('/api/admin/logout', { method: 'POST' });
+    } catch {
+      // ignore logout errors
+    }
     setIsAuthenticated(false);
     setInputPassword('');
     setAuthError('');
