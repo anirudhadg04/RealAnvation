@@ -233,7 +233,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       amount: string;
       utr: string;
       participantCount: number;
-      status: 'Valid' | 'Invalid';
+      status: 'Valid' | 'Invalid' | 'Skipped';
       errors: string[];
     }> | null;
     validationError: string | null;
@@ -1164,6 +1164,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   const [xlsxImportData, setXlsxImportData] = useState<any[] | null>(null);
   const [xlsxImportError, setXlsxImportError] = useState<string | null>(null);
   const [xlsxValidating, setXlsxValidating] = useState(false);
+  const [xlsxSelectedRows, setXlsxSelectedRows] = useState<number[]>([]);
   const [xlsxImportStatus, setXlsxImportStatus] = useState<'PENDING_PAYMENT_AUDIT' | 'APPROVED' | 'REJECTED'>('PENDING_PAYMENT_AUDIT');
   const [xlsxExistingTeamMode, setXlsxExistingTeamMode] = useState<'skip' | 'update-status'>('skip');
   const csvFileRef = React.useRef<HTMLInputElement>(null);
@@ -1229,7 +1230,11 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ ...payload, importStatus: xlsxImportStatus, existingTeamMode: xlsxExistingTeamMode })
+        body: JSON.stringify({
+          ...payload,
+          ...(xlsxSelectedRows.length > 0 ? { selectedRowIndices: xlsxSelectedRows } : {}),
+          importStatus: xlsxImportStatus
+        })
       });
       if (!res.ok) {
         const text = await res.text();
@@ -1237,6 +1242,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
       }
       const data = await res.json();
       if (data.success) {
+        setXlsxSelectedRows((data.preview || []).filter((row: any) => row.status === 'Valid').map((row: any) => row.rowIndex));
         setCsvImportModal(prev => ({
           ...prev,
           preview: data.preview || null,
@@ -1266,7 +1272,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ ...payload, confirm: true, importStatus: xlsxImportStatus, existingTeamMode: xlsxExistingTeamMode })
+        body: JSON.stringify({ ...payload, confirm: true, selectedRowIndices: xlsxSelectedRows, importStatus: xlsxImportStatus })
       });
       if (!res.ok) {
         const text = await res.text();
@@ -4540,31 +4546,17 @@ participants: [
                 </div>
               )}
 
-              {csvImportModal.file && !csvImportModal.preview && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-2xl bg-slate-950 border border-slate-800">
-                  <label className="text-xs text-slate-300">
-                    Status for new teams
-                    <select
-                      value={xlsxImportStatus}
-                      onChange={(event) => setXlsxImportStatus(event.target.value as typeof xlsxImportStatus)}
-                      className="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-white"
-                    >
+              {csvImportModal.preview && (
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-300">
+                  <label className="flex items-center gap-2">
+                    Status for selected new team(s)
+                    <select value={xlsxImportStatus} onChange={(event) => setXlsxImportStatus(event.target.value as typeof xlsxImportStatus)} className="rounded-lg bg-slate-900 border border-slate-700 px-2 py-1 text-white">
                       <option value="PENDING_PAYMENT_AUDIT">Pending payment audit</option>
                       <option value="APPROVED">Approved</option>
                       <option value="REJECTED">Rejected</option>
                     </select>
                   </label>
-                  <label className="text-xs text-slate-300">
-                    Existing teams in this sheet
-                    <select
-                      value={xlsxExistingTeamMode}
-                      onChange={(event) => setXlsxExistingTeamMode(event.target.value as typeof xlsxExistingTeamMode)}
-                      className="mt-1 w-full rounded-lg bg-slate-900 border border-slate-700 px-3 py-2 text-white"
-                    >
-                      <option value="skip">Skip existing teams</option>
-                      <option value="update-status">Update existing team status</option>
-                    </select>
-                  </label>
+                  <span>Select only the rows to accept.</span>
                 </div>
               )}
 
@@ -4612,6 +4604,7 @@ participants: [
                     <table className="w-full text-left text-[10px]">
                       <thead className="bg-slate-900 text-slate-400 font-mono text-[9px] uppercase border-b border-slate-800 sticky top-0">
                         <tr>
+                          <th className="p-2">Accept</th>
                           <th className="p-2">Row</th>
                           <th className="p-2">Team Name</th>
                           <th className="p-2">Leader Email</th>
@@ -4624,6 +4617,17 @@ participants: [
                       <tbody className="divide-y divide-slate-800/60">
                         {csvImportModal.preview.map((row) => (
                           <tr key={row.rowIndex} className={row.status === 'Invalid' ? 'bg-red-950/20' : 'bg-slate-950/50'}>
+                            <td className="p-2">
+                              <input
+                                type="checkbox"
+                                checked={xlsxSelectedRows.includes(row.rowIndex)}
+                                disabled={row.status !== 'Valid'}
+                                onChange={(event) => setXlsxSelectedRows((current) => event.target.checked
+                                  ? [...current, row.rowIndex]
+                                  : current.filter((index) => index !== row.rowIndex))}
+                                aria-label={`Accept ${row.teamName}`}
+                              />
+                            </td>
                             <td className="p-2 font-mono text-slate-400">{row.rowIndex}</td>
                             <td className="p-2 text-white font-bold">{row.teamName}</td>
                             <td className="p-2 text-slate-300">{row.leaderEmail}</td>
@@ -4633,6 +4637,8 @@ participants: [
                               <span className={`px-1.5 py-0.5 rounded-full text-[9px] font-bold ${
                                 row.status === 'Valid'
                                   ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                  : row.status === 'Skipped'
+                                    ? 'bg-slate-900 text-slate-500 border border-slate-700'
                                   : 'bg-red-950 text-red-400 border border-red-800'
                               }`}>
                                 {row.status}
@@ -4653,7 +4659,7 @@ participants: [
                     </table>
                   </div>
 
-                  {csvImportModal.preview.every(p => p.status === 'Valid') && (
+                  {xlsxSelectedRows.some((rowIndex) => csvImportModal.preview?.some((row) => row.rowIndex === rowIndex && row.status === 'Valid')) && (
                     <div className="flex items-center gap-2 pt-2">
                       <button
                         onClick={handleXlsxImport}

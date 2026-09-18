@@ -4023,6 +4023,10 @@ auditLogs.unshift({
       if (!requireDurableTeamStore(res)) return;
       const body = req.body || {};
       const { confirm } = body;
+      const selectedRowsProvided = Array.isArray(body.selectedRowIndices);
+      const selectedRowIndices = new Set<number>(selectedRowsProvided
+        ? body.selectedRowIndices.map((value: unknown) => Number(value)).filter((value: number) => Number.isInteger(value))
+        : []);
       const importStatus = String(body.importStatus || 'PENDING_PAYMENT_AUDIT').trim().toUpperCase();
       const approvalStatus = importStatus === 'PENDING_PAYMENT_AUDIT' ? 'PENDING' : importStatus as 'APPROVED' | 'REJECTED';
       const existingTeamMode = body.existingTeamMode === 'update-status' ? 'update-status' : 'skip';
@@ -4055,7 +4059,7 @@ auditLogs.unshift({
         amount: string;
         utr: string;
         participantCount: number;
-        status: 'Valid' | 'Invalid';
+        status: 'Valid' | 'Invalid' | 'Skipped';
         errors: string[];
         rowData?: any;
       }
@@ -4242,19 +4246,17 @@ preview.push({
       }
 
       for (const p of preview) {
+        if (selectedRowsProvided && !selectedRowIndices.has(p.rowIndex)) {
+          p.status = 'Skipped';
+          p.errors = [];
+          continue;
+        }
         if (p.status !== 'Valid') continue;
         const rd = p.rowData!;
         const existingTeam = rd.teamName ? existingTeamsByName.get(normalizeTeamName(rd.teamName)) : undefined;
         if (existingTeam) {
-          p.rowData.existingTeamId = existingTeam.id;
-          p.rowData.existingTeamStatus = existingTeam.approvalStatus || existingTeam.status || 'UNKNOWN';
-          p.rowData.existingTeamMode = existingTeamMode;
-          p.errors = [];
-          p.errors.push(existingTeamMode === 'update-status'
-            ? `Existing team ${existingTeam.id} will have its status updated.`
-            : `Existing team ${existingTeam.id} will be skipped.`);
-          p.status = 'Valid';
-          continue;
+          p.errors.push(`Team name "${rd.teamName}" already exists in database.`);
+          p.status = 'Invalid';
         }
         const participantDefs = [
           { email: rd.leaderEmail, phone: rd.leaderPhone, idx: 1 },
@@ -4281,13 +4283,14 @@ preview.push({
       }
 
       const invalidCount = preview.filter(p => p.status === 'Invalid').length;
+      const selectedValidCount = preview.filter(p => p.status === 'Valid').length;
 
       if (invalidCount > 0) {
         return res.json({
           success: true,
           valid: false,
           preview: preview.map(({ rowData, ...rest }) => rest),
-          message: `${invalidCount} row(s) have errors. Zero rows will be imported. Fix all errors and re-upload.`
+          message: `${invalidCount} selected row(s) have errors. Unselected rows will be ignored.`
         });
       }
 
@@ -4296,7 +4299,7 @@ preview.push({
           success: true,
           valid: true,
           preview: preview.map(({ rowData, ...rest }) => rest),
-          message: `All ${preview.length} rows are valid. Existing teams will be ${existingTeamMode === 'update-status' ? 'updated' : 'skipped'}. Confirm import to proceed.`,
+          message: `${selectedValidCount} selected row(s) are valid. Confirm import to proceed.`,
           canImport: true
         });
       }
@@ -4307,25 +4310,7 @@ preview.push({
       const previousNextTeamNumber = nextTeamNumber;
       for (let i = 0; i < dataRows.length; i++) {
         const rd = preview[i].rowData!;
-        if (rd.existingTeamId) {
-          const existingTeam = existingTeamsByName.get(normalizeTeamName(rd.teamName));
-          if (existingTeam && existingTeamMode === 'update-status') {
-            const statusPatch: Partial<Team> = {
-              status: importStatus as Team['status'],
-              approvalStatus,
-              paymentStatus: importStatus === 'APPROVED' ? 'PAYMENT_APPROVED' : importStatus === 'REJECTED' ? 'REJECTED' : 'PENDING_PAYMENT_AUDIT'
-            };
-            const updatedExisting = { ...existingTeam, ...statusPatch };
-            updatedExistingTeams.push(updatedExisting);
-          }
-          importedTeams.push({
-            id: existingTeam?.id || rd.existingTeamId,
-            teamName: rd.teamName,
-            skipped: existingTeamMode !== 'update-status',
-            updated: existingTeamMode === 'update-status'
-          });
-          continue;
-        }
+        if (selectedRowsProvided && !selectedRowIndices.has(i + 1)) continue;
         const norm = (v: any) => {
           const s = String(v || "").trim();
           return s === '-' || s === '—' ? '' : s;
@@ -4445,18 +4430,15 @@ const leaderParticipant: Participant = {
         }
       }
 
-      const newlyImportedCount = importedTeams.filter((team) => !team.skipped && !team.updated).length;
-      const updatedExistingCount = importedTeams.filter((team) => team.updated).length;
-      const skippedExistingCount = importedTeams.filter((team) => team.skipped).length;
       return res.json({
         success: true,
         valid: true,
         imported: true,
-        count: newlyImportedCount + updatedExistingCount,
-        skippedCount: skippedExistingCount,
-        updatedCount: updatedExistingCount,
+        count: importedTeams.length,
+        skippedCount: dataRows.length - importedTeams.length,
+        updatedCount: 0,
         teams: importedTeams,
-        message: `Imported ${newlyImportedCount} new team(s), updated ${updatedExistingCount} existing team(s), and skipped ${skippedExistingCount} existing team(s).`
+        message: `Imported ${importedTeams.length} selected team(s). Unselected rows were skipped.`
       });
     } catch (err: any) {
       console.error("[XLSX IMPORT ERROR]", err);
