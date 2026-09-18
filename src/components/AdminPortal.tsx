@@ -311,21 +311,21 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   const fetchAdminData = async () => {
     try {
       const [tRes, sRes, aRes, tkRes, mRes, cmsRes, logRes, admRes, rbRes, emRes, jrRes, schRes, polRes, cpRes, spRes] = await Promise.all([
-        fetch('/api/teams'),
-        fetch('/api/submissions'),
-        fetch('/api/announcements'),
-        fetch('/api/tickets'),
-        fetch('/api/milestone-reports'),
-        fetch('/api/cms-config'),
-        fetch('/api/audit-logs'),
-        fetch('/api/admin-users'),
-        fetch('/api/rulebooks'),
-        fetch('/api/email-campaigns'),
-        fetch('/api/judging-rounds'),
-        fetch('/api/schedule'),
-        fetch('/api/policies'),
-        fetch('/api/checkpoints'),
-        fetch('/api/sponsors')
+        fetch('/api/teams', { credentials: 'include' }),
+        fetch('/api/submissions', { credentials: 'include' }),
+        fetch('/api/announcements', { credentials: 'include' }),
+        fetch('/api/tickets', { credentials: 'include' }),
+        fetch('/api/milestone-reports', { credentials: 'include' }),
+        fetch('/api/cms-config', { credentials: 'include' }),
+        fetch('/api/audit-logs', { credentials: 'include' }),
+        fetch('/api/admin-users', { credentials: 'include' }),
+        fetch('/api/rulebooks', { credentials: 'include' }),
+        fetch('/api/email-campaigns', { credentials: 'include' }),
+        fetch('/api/judging-rounds', { credentials: 'include' }),
+        fetch('/api/schedule', { credentials: 'include' }),
+        fetch('/api/policies', { credentials: 'include' }),
+        fetch('/api/checkpoints', { credentials: 'include' }),
+        fetch('/api/sponsors', { credentials: 'include' })
       ]);
 
       const tData = await tRes.json();
@@ -441,7 +441,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
           registrationOpen: data.registrationOpen
         }));
         showToast(data.message || (data.freezeRegistrations ? "Registrations FROZEN." : "Registrations OPEN."));
-        fetchAdminData();
+        await fetchAdminData();
       }
     } catch (err) {
       showToast("Error toggling registration status");
@@ -1286,7 +1286,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         setXlsxImportData(null);
         setXlsxSelectedRows([]);
         if (csvFileRef.current) csvFileRef.current.value = '';
-        fetchAdminData();
+        await fetchAdminData();
       } else {
         setCsvImportModal(prev => ({
           ...prev,
