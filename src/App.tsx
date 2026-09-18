@@ -58,7 +58,7 @@ export default function App() {
 
     let cancelled = false;
     setAdminSessionState('checking');
-    fetch('/api/session')
+    fetch('/api/session', { credentials: 'include' })
       .then((res) => res.json())
       .then((data) => {
         if (cancelled) return;

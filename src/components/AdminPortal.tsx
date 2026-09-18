@@ -294,7 +294,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   useEffect(() => {
     const checkSession = async () => {
       try {
-        const res = await fetch('/api/session');
+        const res = await fetch('/api/session', { credentials: 'include' });
         const data = await res.json();
         if (data.authenticated && data.user?.type === 'admin') {
           setIsAuthenticated(true);
@@ -410,7 +410,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
 
   const handleAdminLogout = async () => {
     try {
-      await fetch('/api/admin/logout', { method: 'POST' });
+      await fetch('/api/admin/logout', { method: 'POST', credentials: 'include' });
     } catch {
       // ignore logout errors
     }
