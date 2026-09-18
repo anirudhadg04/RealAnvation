@@ -3312,10 +3312,17 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
     });
   });
 
-  app.post("/api/admin/logout", (req, res) => {
-    clearAuthCookie(res);
-    res.json({ success: true, message: "Logged out." });
+app.post("/api/admin/logout", (req, res) => {
+  const secure = process.env.NODE_ENV === "production";
+  res.cookie(AUTH_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    expires: new Date(0),
+    path: "/",
   });
+  res.json({ success: true, message: "Logged out." });
+});
 
   app.post("/api/admin-users", requireSuperAdmin, (req, res) => {
     const { email, name, role, twoFactorEnabled, username, password } = req.body;
@@ -3884,20 +3891,20 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
             : 'Team approved and credentials/QR were saved, but email delivery failed. Use the protected resend endpoint without creating new credentials.'
         });
       }
-      auditLogs.unshift({
-        id: `log-${Date.now()}`,
-        timestamp: new Date().toISOString(),
-        actorEmail: req.session?.email || req.session?.username || 'unknown-admin',
-        actorRole: (req.session?.role || 'ADMIN') as AdminRole,
-        action: decision === 'APPROVED' ? 'Team Approve' : 'Team Reject',
-        target: `Team ${team.teamName} (${team.id})`,
-        beforeValue: team.approvalStatus || 'PENDING',
-        afterValue: decision,
-        reason: decision === 'REJECTED' ? String(req.body.reason || 'Payment audit rejected by admin') : 'Admin approved team after payment audit.',
-        ipAddress: getClientIp(req)
-      });
-      markDirty();
-      return res.json({ success: true, team: sanitizeTeamForClient(updated), approvalEmailStatus: updated.approvalEmailStatus, message: `Team ${decision.toLowerCase()} successfully.` });
+auditLogs.unshift({
+         id: `log-${Date.now()}`,
+         timestamp: new Date().toISOString(),
+         actorEmail: req.session?.email || req.session?.username || 'unknown-admin',
+         actorRole: (req.session?.role || 'ADMIN') as AdminRole,
+         action: (decision as string) === 'APPROVED' ? 'Team Approve' : 'Team Reject',
+         target: `Team ${team.teamName} (${team.id})`,
+         beforeValue: team.approvalStatus || 'PENDING',
+         afterValue: decision,
+         reason: (decision as string) === 'REJECTED' ? String(req.body.reason || 'Payment audit rejected by admin') : 'Admin approved team after payment audit.',
+         ipAddress: getClientIp(req)
+       });
+       markDirty();
+       return res.json({ success: true, team: sanitizeTeamForClient(updated), approvalEmailStatus: updated.approvalEmailStatus, message: `Team ${(decision as string).toLowerCase()} successfully.` });
     } catch (err: any) {
       return res.status(500).json({ success: false, error: 'Could not persist payment audit decision. Refresh and retry.' });
     } finally {

@@ -42,7 +42,10 @@ test.before(async () => {
   serverApp = await startServer({ listen: false });
   const { createServer } = await import('node:http');
   const httpServer = createServer(serverApp);
-  await new Promise((resolve) => httpServer.listen(TEST_PORT, resolve));
+await new Promise((resolve) => {
+     httpServer.once('listening', resolve);
+     httpServer.listen(TEST_PORT);
+   });
 
   const res = await httpRequest('POST', '/api/admin-login', {
     identifier: 'superadmin@kssem.edu.in',
