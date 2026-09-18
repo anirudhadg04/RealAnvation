@@ -1267,12 +1267,15 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
   const handleXlsxImport = async () => {
     if (!xlsxImportData) return;
     setCsvImportModal(prev => ({ ...prev, importing: true }));
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 30000);
     try {
       const payload = buildXlsxImportPayload(xlsxImportData);
       const res = await fetch('/api/admin/import-xlsx', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        signal: controller.signal,
         body: JSON.stringify({ ...payload, confirm: true, selectedRowIndices: xlsxSelectedRows, importStatus: xlsxImportStatus })
       });
       if (!res.ok) {
@@ -1286,7 +1289,7 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         setXlsxImportData(null);
         setXlsxSelectedRows([]);
         if (csvFileRef.current) csvFileRef.current.value = '';
-        await fetchAdminData();
+        void fetchAdminData();
       } else {
         setCsvImportModal(prev => ({
           ...prev,
@@ -1295,9 +1298,13 @@ const [quickActionModal, setQuickActionModal] = useState<string | null>(null);
         }));
       }
     } catch (err: any) {
-      const msg = err?.message || 'Import failed.';
+      const msg = err?.name === 'AbortError'
+        ? 'Import timed out. The server may still be processing the workbook; refresh the ledger before retrying.'
+        : err?.message || 'Import failed.';
       console.error('[XLSX IMPORT ERROR]', err);
       setCsvImportModal(prev => ({ ...prev, importing: false, validationError: msg }));
+    } finally {
+      window.clearTimeout(timeout);
     }
   };
 
