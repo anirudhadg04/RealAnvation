@@ -3,7 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/[...path].ts": {
+    "api/[[...path]].ts": {
       "maxDuration": 60,
       "memory": 1024,
       "includeFiles": "dist/server.cjs"
@@ -11,7 +11,7 @@
   },
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
