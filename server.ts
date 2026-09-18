@@ -3313,7 +3313,13 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
   });
 
 app.post("/api/admin/logout", (req, res) => {
-  clearAuthCookie(res);
+  res.cookie(AUTH_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    maxAge: 0,
+    path: "/",
+  });
   res.json({ success: true, message: "Logged out." });
 });
 
@@ -4677,8 +4683,17 @@ export default async function vercelHandler(req: any, res: any) {
   if (!vercelAppPromise) vercelAppPromise = startServer({ listen: false });
   const app = await vercelAppPromise;
   // Vercel catch-all API routes strip the /api prefix; restore it for Express routing
-  if (req.url && !req.url.startsWith('/api/')) {
-    req.url = '/api' + req.url;
+  if (req.url) {
+    let url = req.url;
+    // Ensure URL starts with /
+    if (!url.startsWith('/')) {
+      url = '/' + url;
+    }
+    // Add /api prefix if not present
+    if (!url.startsWith('/api/')) {
+      url = '/api' + url;
+    }
+    req.url = url;
   }
   return app(req, res);
 }
