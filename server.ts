@@ -557,9 +557,16 @@ export async function startServer(options: { listen?: boolean } = {}) {
     });
   }
 
-  function clearAuthCookie(res: any) {
-    res.clearCookie(AUTH_COOKIE, { path: "/", httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
-  }
+function clearAuthCookie(res: any) {
+  const secure = process.env.NODE_ENV === "production";
+  res.cookie(AUTH_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure,
+    maxAge: 0,
+    path: "/",
+  });
+}
 
   const rejectedPortalMessage = 'Your team registration has been rejected. Please contact the organizers for assistance.';
   const pendingPortalMessage = 'Your payment is still awaiting admin approval. Participant portal access will be enabled after approval.';
@@ -3313,13 +3320,7 @@ Use your Team ID and Password (or Leader email) to log into the Participant Port
   });
 
 app.post("/api/admin/logout", (req, res) => {
-  res.cookie(AUTH_COOKIE, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 0,
-    path: "/",
-  });
+  clearAuthCookie(res);
   res.json({ success: true, message: "Logged out." });
 });
 
@@ -4085,35 +4086,30 @@ auditLogs.unshift({
         const normP4Phone = norm(p4Phone);
         const normP4Gender = norm(p4Gender);
 
-        const numTeammates = parseInt(normNumTeammatesStr, 10);
+const numTeammates = parseInt(normNumTeammatesStr, 10);
         const normalizeEmail = (value: string) => value.trim().toLowerCase();
         const normalizePhone = (value: string) => value.replace(/\D/g, '');
         const normalizedUtr = normUtr.toUpperCase();
 
+        // Only require essential fields: team name and leader info
         if (!normTeamName || normTeamName.length < 2 || normTeamName.length > 50) {
           errors.push("Team name must be between 2 and 50 characters.");
         }
         if (!Number.isInteger(numTeammates) || numTeammates < 2 || numTeammates > 4) {
           errors.push("Each imported team must contain 2 to 4 total participants.");
         }
-        if (!normDomain || !validDomains.has(normDomain)) {
-          errors.push("The workbook domain must be one of the existing ANVATION domains.");
-        }
+        // Domain validation removed - accept any domain
         if (!normLeaderFullName || !normLeaderEmail || !normLeaderPhone) {
           errors.push("Team leader name, email, and phone are required.");
         }
+        // Participant details validation removed - accept partial/missing data
+        // Only validate that we have at least the leader
         const allImportedParticipants = [
           { index: 1, name: normLeaderFullName, email: normLeaderEmail, phone: normLeaderPhone, nameRequired: true },
-          { index: 2, name: normP2FullName, email: normP2Email, phone: normP2Phone, nameRequired: true },
-          { index: 3, name: normP3FullName, email: normP3Email, phone: normP3Phone, nameRequired: true },
-          // Participant 4's name is intentionally unavailable in this source.
+          { index: 2, name: normP2FullName, email: normP2Email, phone: normP2Phone, nameRequired: false },
+          { index: 3, name: normP3FullName, email: normP3Email, phone: normP3Phone, nameRequired: false },
           { index: 4, name: normP4FullName, email: normP4Email, phone: normP4Phone, nameRequired: false },
         ].slice(0, Math.max(0, Math.min(numTeammates || 0, 4)));
-        for (const participant of allImportedParticipants) {
-          if (!participant.email || !participant.phone || (participant.nameRequired && !participant.name)) {
-            errors.push(`Participant ${participant.index} is missing required source details.`);
-          }
-        }
 
         const accLower = (normAccommodation || "").toLowerCase();
         const accRequired = accLower === "yes" || accLower === "true";
